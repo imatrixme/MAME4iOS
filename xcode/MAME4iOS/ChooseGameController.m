@@ -126,8 +126,8 @@
 #define LAYOUT_MODE_KEY     @"LayoutMode"
 #define LAYOUT_MODE_DEFAULT LayoutSmall
 #define SCOPE_MODE_KEY      @"ScopeMode"
-#define SCOPE_MODE_DEFAULT  @"System"
-#define ALL_SCOPES          @[@"System", @"Clones", @"Manufacturer", @"Year", @"Genre", @"Driver"]
+#define SCOPE_MODE_DEFAULT  @"系统"
+#define ALL_SCOPES          @[@"系统", @"复刻", @"厂商", @"年份", @"体裁", @"驱动"]
 #define RECENT_GAMES_MAX    8
 
 #define SECTIONS_COLLAPSED_KEY    @"CollapsedSections"
@@ -247,12 +247,12 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
 - (void)viewDidLoad
 {
 #if USE_TITLE_IMAGE
-    CGFloat height = TARGET_OS_IOS ? 44.0 : (44.0 * 2.0);
+    CGFloat height = TARGET_OS_IOS ? 36.0 : (36.0 * 2.0);
     UIImage* image = [[UIImage imageNamed:@"mame_logo"] scaledToSize:CGSizeMake(0.0, height)];
     UIImageView* title = [[UIImageView alloc] initWithImage:image];
 #else
     UILabel* title = [[UILabel alloc] init];
-    CGFloat height = TARGET_OS_IOS ? (44.0 * 0.6) : (44.0 * 1.5);
+    CGFloat height = TARGET_OS_IOS ? (36.0 * 0.6) : (36.0 * 1.5);
     title.text = @PRODUCT_NAME;
     title.font = [UIFont boldSystemFontOfSize:height];
     title.textColor = TITLE_COLOR;
@@ -338,10 +338,10 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
     _searchController.delegate = self;
     _searchController.searchBar.delegate = self;
     _searchController.obscuresBackgroundDuringPresentation = NO;
-    _searchController.searchBar.placeholder = @"Search";
+    _searchController.searchBar.placeholder = @"搜索";
     
     // make the cancel button say Done
-    [[UIBarButtonItem appearanceWhenContainedInInstancesOfClasses:@[[UISearchBar class]]] setTitle:@"Done"];
+    [[UIBarButtonItem appearanceWhenContainedInInstancesOfClasses:@[[UISearchBar class]]] setTitle:@"完成"];
  
     self.definesPresentationContext = TRUE;
 
@@ -427,7 +427,7 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
     _searchController.obscuresBackgroundDuringPresentation = YES;
 
     _searchController.searchBar.scopeButtonTitles = ALL_SCOPES;
-    _searchController.searchBar.placeholder = @"Search";
+    _searchController.searchBar.placeholder = @"搜索";
     _searchController.searchBar.showsScopeBar = NO;
     _searchController.hidesNavigationBarDuringPresentation = YES;
     
@@ -446,7 +446,7 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
 -(void)showSettings
 {
     if (_selectGameCallback)
-        _selectGameCallback(@{kGameInfoDescription:@"Settings", kGameInfoName:kGameInfoNameSettings});
+        _selectGameCallback(@{kGameInfoDescription:@"设置", kGameInfoName:kGameInfoNameSettings});
 }
 
 - (void)viewWillLayoutSubviews
@@ -578,23 +578,23 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
     NSString* key = nil;
     BOOL clones = FALSE;
     
-    if ([_gameFilterScope isEqualToString:@"Year"])
+    if ([_gameFilterScope isEqualToString:@"年份"])
         key = kGameInfoYear;
-    if ([_gameFilterScope isEqualToString:@"Manufacturer"])
+    if ([_gameFilterScope isEqualToString:@"厂商"])
         key = kGameInfoManufacturer;
-    if ([_gameFilterScope isEqualToString:@"Category"])
+    if ([_gameFilterScope isEqualToString:@"分类"])
         key = kGameInfoCategory;
-    if ([_gameFilterScope isEqualToString:@"Genre"])
+    if ([_gameFilterScope isEqualToString:@"体裁"])
         key = kGameInfoCategory;
-    if ([_gameFilterScope isEqualToString:@"Driver"])
+    if ([_gameFilterScope isEqualToString:@"驱动"])
         key = kGameInfoDriver;
-    if ([_gameFilterScope isEqualToString:@"Parent"])
+    if ([_gameFilterScope isEqualToString:@"起源"])
         key = kGameInfoParent;
-    if ([_gameFilterScope isEqualToString:@"System"])
+    if ([_gameFilterScope isEqualToString:@"系统"])
         key = kGameInfoSystem;
-    if ([_gameFilterScope isEqualToString:@"Type"])
+    if ([_gameFilterScope isEqualToString:@"类型"])
         key = kGameInfoType;
-    if ((clones = [_gameFilterScope isEqualToString:@"Clones"]))
+    if ((clones = [_gameFilterScope isEqualToString:@"复刻"]))
         key = kGameInfoSystem;
 
     for (NSDictionary* game in filteredGames) {
@@ -622,7 +622,7 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
             section = [NSString stringWithFormat:@"%@ • Clones", section];
         
         if ([section length] == 0)
-            section = @"Unknown";
+            section = @"未知";
         
         NSArray* sections;
         if (key == (void*)kGameInfoCategory)
@@ -641,7 +641,7 @@ typedef NS_ENUM(NSInteger, LayoutMode) {
     NSArray* gameSectionTitles = [gameData.allKeys sortedArrayUsingSelector:@selector(localizedCompare:)];
     
     // move Computer(s) and Console(s) etc to the end
-    for (NSString* title in @[kGameInfoTypeConsole, kGameInfoTypeComputer, kGameInfoTypeBIOS, @"Unknown"]) {
+    for (NSString* title in @[kGameInfoTypeConsole, kGameInfoTypeComputer, kGameInfoTypeBIOS, @"未知"]) {
         if ([gameSectionTitles containsObject:title]) {
             gameSectionTitles = [gameSectionTitles filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF != %@", title]];
             gameSectionTitles = [gameSectionTitles arrayByAddingObject:title];
@@ -1468,10 +1468,10 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     GameCell* cell = [collectionView dequeueReusableSupplementaryViewOfKind:UICollectionElementKindSectionHeader withReuseIdentifier:HEADER_IDENTIFIER forIndexPath:indexPath];
     [cell setHorizontal:TRUE];
     cell.text.text = _gameSectionTitles[indexPath.section];
-    cell.text.font = [UIFont systemFontOfSize:cell.bounds.size.height * 0.8 weight:UIFontWeightHeavy];
+    cell.text.font = [UIFont systemFontOfSize:cell.bounds.size.height * 0.6 weight:UIFontWeightHeavy];
     cell.text.textColor = HEADER_TEXT_COLOR;
     cell.contentView.backgroundColor = HEADER_BACKGROUND_COLOR;
-    [cell setTextInsets:UIEdgeInsetsMake(2.0, self.view.safeAreaInsets.left + 2.0, 2.0, self.view.safeAreaInsets.right + 2.0)];
+    [cell setTextInsets:UIEdgeInsetsMake(2.0, self.view.safeAreaInsets.left + 8.0, 2.0, self.view.safeAreaInsets.right + 8.0)];
     [cell setCornerRadius:0.0];
     [cell setBorderWidth:0.0];
     
@@ -1585,7 +1585,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     NSString* title = [self menuTitleForGame:game];
     NSString* message = nil;
 
-    [self showAlertWithTitle:title message:message buttons:@[@"Delete Settings", @"Delete Files", @"Cancel"] handler:^(NSUInteger button) {
+    [self showAlertWithTitle:title message:message buttons:@[@"删除设置", @"删除文件", @"取消"] handler:^(NSUInteger button) {
         
         // cancel get out!
         if (button == 2)
@@ -1675,7 +1675,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
                               [_mameinfo attributedStringForKey:game.gameParent attributes:atributes];
 
     GameInfoController* gameInfoController = [[GameInfoController alloc] initWithGame:game];
-    gameInfoController.title = @"Info";
+    gameInfoController.title = @"详情";
 
 #if TARGET_OS_IOS
     UINavigationController* nav = [[UINavigationController alloc] initWithRootViewController:gameInfoController];
@@ -1705,7 +1705,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     }
     
     NSString* type = [NSString stringWithFormat:@"%@.%@", NSBundle.mainBundle.bundleIdentifier, @"play"];
-    NSString* title = [NSString stringWithFormat:@"Play %@", game.gameTitle];
+    NSString* title = [NSString stringWithFormat:@"游玩 %@", game.gameTitle];
     
     NSUserActivity* activity = [[NSUserActivity alloc] initWithActivityType:type];
     
@@ -1812,7 +1812,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     
     if (game.gameIsSnapshot) {
         return @[
-            [self actionWithTitle:@"Use as Title Image" image:[UIImage systemImageNamed:@"photo"] destructive:NO handler:^(id action) {
+            [self actionWithTitle:@"用作封面" image:[UIImage systemImageNamed:@"photo"] destructive:NO handler:^(id action) {
                 NSString* src = game.gameLocalImageURL.path;
                 NSString* dst = [NSString stringWithFormat:@"%@/%@.png", getDocumentPath(@"titles"), game.gameFile.stringByDeletingLastPathComponent];
                 [NSFileManager.defaultManager removeItemAtPath:dst error:nil];
@@ -1821,7 +1821,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
                 [self updateImage:[NSURL fileURLWithPath:dst]];
             }],
 #if TARGET_OS_IOS
-            [self actionWithTitle:@"Share" image:[UIImage systemImageNamed:@"square.and.arrow.up"] destructive:NO handler:^(id action) {
+            [self actionWithTitle:@"分享" image:[UIImage systemImageNamed:@"square.and.arrow.up"] destructive:NO handler:^(id action) {
                 NSURL* url = game.gameLocalImageURL;
                 UIActivityViewController* activity = [[UIActivityViewController alloc] initWithActivityItems:@[url] applicationActivities:nil];
                 activity.popoverPresentationController.sourceView = self.view;
@@ -1830,7 +1830,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
                 [self presentViewController:activity animated:YES completion:nil];
             }],
 #endif
-            [self actionWithTitle:@"Delete" image:[UIImage systemImageNamed:@"trash"] destructive:YES handler:^(id action) {
+            [self actionWithTitle:@"删除" image:[UIImage systemImageNamed:@"trash"] destructive:YES handler:^(id action) {
                 [NSFileManager.defaultManager removeItemAtPath:game.gameLocalImageURL.path error:nil];
                 [self setGameList:self->_gameList];
             }]
@@ -1839,11 +1839,11 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     
     BOOL is_fav = [self isFavorite:game];
     
-    NSString* fav_text = is_fav ? @"Unfavorite" : @"Favorite";
+    NSString* fav_text = is_fav ? @"取消收藏" : @"添加收藏";
     NSString* fav_icon = is_fav ? @"star.slash" : @"star";
     
     NSArray* actions = @[
-        [self actionWithTitle:@"Play" image:[UIImage systemImageNamed:@"gamecontroller"] destructive:NO handler:^(id action) {
+        [self actionWithTitle:@"游玩" image:[UIImage systemImageNamed:@"gamecontroller"] destructive:NO handler:^(id action) {
             [self collectionView:self.collectionView didSelectItemAtIndexPath:indexPath];
         }],
         
@@ -1855,7 +1855,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     
     if ([self isRecent:game]) {
         actions = [actions arrayByAddingObjectsFromArray:@[
-            [self actionWithTitle:@"Remove from Recently Played" image:[UIImage systemImageNamed:@"minus.circle"] destructive:NO handler:^(id action) {
+            [self actionWithTitle:@"从最近游玩中移除" image:[UIImage systemImageNamed:@"minus.circle"] destructive:NO handler:^(id action) {
                 [self setRecent:game isRecent:NO];
                 [self filterGameList];
             }]
@@ -1865,7 +1865,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     if ([_history boolForKey:game.gameName]   || [_mameinfo boolForKey:game.gameName] ||
         [_history boolForKey:game.gameParent] || [_mameinfo boolForKey:game.gameParent]) {
         actions = [actions arrayByAddingObjectsFromArray:@[
-            [self actionWithTitle:@"Info" image:[UIImage systemImageNamed:@"info.circle"] destructive:NO handler:^(id action) {
+            [self actionWithTitle:@"详情" image:[UIImage systemImageNamed:@"info.circle"] destructive:NO handler:^(id action) {
                 [self info:game];
             }]
         ]];
@@ -1877,7 +1877,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
         INVoiceShortcut* shortcut = [self getVoiceShortcut:activity];
         if (activity != nil) {
             actions = [actions arrayByAddingObjectsFromArray:@[
-                [self actionWithTitle:@"Add to Siri" image:[UIImage systemImageNamed:shortcut ? @"checkmark.circle" : @"plus.circle"] destructive:NO handler:^(id action) {
+                [self actionWithTitle:@"添加到Siri" image:[UIImage systemImageNamed:shortcut ? @"checkmark.circle" : @"plus.circle"] destructive:NO handler:^(id action) {
                     [self siri:game activity:activity shortcut:shortcut];
                 }]
             ]];
@@ -1888,11 +1888,11 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     if (!game.gameIsFake) {
         actions = [actions arrayByAddingObjectsFromArray:@[
 #if TARGET_OS_IOS
-            [self actionWithTitle:@"Share" image:[UIImage systemImageNamed:@"square.and.arrow.up"] destructive:NO handler:^(id action) {
+            [self actionWithTitle:@"分享" image:[UIImage systemImageNamed:@"square.and.arrow.up"] destructive:NO handler:^(id action) {
                 [self share:game];
             }],
 #endif
-            [self actionWithTitle:@"Delete" image:[UIImage systemImageNamed:@"trash"] destructive:YES handler:^(id action) {
+            [self actionWithTitle:@"删除" image:[UIImage systemImageNamed:@"trash"] destructive:YES handler:^(id action) {
                 [self delete:game];
             }]
         ]];
@@ -1965,7 +1965,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     for (UIAlertAction* action in actions)
         [alert addAction:action];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     if (alert.popoverPresentationController != nil) {
         UIView* view = [self.collectionView cellForItemAtIndexPath:indexPath] ?: self.view;
@@ -2750,7 +2750,7 @@ NSAttributedString* attributedString(NSString* text, UIFont* font, UIColor* colo
     
     // add a title to the top of the text
     if (text != nil) {
-        NSString* title = indexPath.item == 1 ? @"History" : @"MAME Info";
+        NSString* title = indexPath.item == 1 ? @"历史" : @"MAME信息";
         
         NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
         paragraph.alignment = NSTextAlignmentCenter;

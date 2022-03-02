@@ -56,15 +56,15 @@
         
         switchAnimatedButtons=nil;
 
-        arrayTouchType = [[NSArray alloc] initWithObjects:@"Digital DPAD",@"Digital Stick",@"Analog Stick", nil];
-        arrayStickType = [[NSArray alloc] initWithObjects:@"Auto",@"2-Way",@"4-Way",@"8-Way", nil];
-        arrayStickSizeValue = [[NSArray alloc] initWithObjects:@"Smaller", @"Small", @"Normal", @"Big", @"Bigger",nil];
+        arrayTouchType = [[NSArray alloc] initWithObjects:@"数字 DPAD",@"数字摇杆",@"模拟摇杆", nil];
+        arrayStickType = [[NSArray alloc] initWithObjects:@"自动",@"2个方向",@"4个方向",@"8个方向", nil];
+        arrayStickSizeValue = [[NSArray alloc] initWithObjects:@"更小", @"小", @"正常", @"大", @"更大",nil];
         
-        arrayNumbuttons = [[NSArray alloc] initWithObjects:@"Auto",@"0 Buttons",@"1 Buttons",@"2 Buttons",@"3 Buttons",@"4 Buttons",@"5 Buttons",@"All Buttons",nil];
+        arrayNumbuttons = [[NSArray alloc] initWithObjects:@"自动",@"0 个按钮",@"1 个按钮",@"2 个按钮",@"3 个按钮",@"4 个按钮",@"5 个按钮",@"所有按钮",nil];
         switchAplusB = nil;
-        arrayAutofireValue = [[NSArray alloc] initWithObjects:@"Disabled", @"Speed 1", @"Speed 2",@"Speed 3",
-                              @"Speed 4", @"Speed 5",@"Speed 6",@"Speed 7",@"Speed 8",@"Speed 9",nil];
-        arrayButtonSizeValue = [[NSArray alloc] initWithObjects:@"Smaller", @"Small", @"Normal", @"Big", @"Bigger",nil];
+        arrayAutofireValue = [[NSArray alloc] initWithObjects:@"禁用", @"速度 1", @"速度 2",@"速度 3",
+                              @"速度 4", @"速度 5",@"速度 6",@"速度 7",@"速度 8",@"速度 9",nil];
+        arrayButtonSizeValue = [[NSArray alloc] initWithObjects:@"更小", @"小", @"正常", @"大", @"更大",nil];
         
         switchP1aspx = nil;
         
@@ -89,7 +89,7 @@
         
         sliderTouchControlsOpacity = nil;
         
-        self.title = @"Input Options";
+        self.title = @"输入控制选项";
     }
     return self;
 }
@@ -128,18 +128,18 @@
     switch (section)
     {
         case 0: return @"";
-        case 1: return @"Stick & DPAD";
-        case 2: return @"Buttons";
+        case 1: return @"摇杆 & DPAD";
+        case 2: return @"按钮";
         case 3: return @"";
-        case 4: return @"Touch Layout";
+        case 4: return @"触控布局";
         case 5: return @"";
-        case 6: return @"Dead Zone";
-        case 7: return @"Touch Lightgun";
-        case 8: return @"Turbo Mode Toggle";
-        case 9: return @"Touch Analog";
-        case 10: return @"Touch Directional Input";
+        case 6: return @"死区";
+        case 7: return @"触摸光枪";
+        case 8: return @"加速模式切换";
+        case 9: return @"触摸模拟";
+        case 10: return @"触摸定向输入";
     }
-    return @"Error!";
+    return @"错误!";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -172,14 +172,14 @@
         case 0:
         {
             if ( indexPath.row == 0 ) {
-                cell.textLabel.text   = @"Animated";
+                cell.textLabel.text   = @"动画";
                 switchAnimatedButtons  = [[UISwitch alloc] initWithFrame:CGRectZero];
                 cell.accessoryView = switchAnimatedButtons ;
                 [switchAnimatedButtons setOn:[op animatedButtons] animated:NO];
                 [switchAnimatedButtons addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
                 break;
             } else if (indexPath.row == 1 ) {
-                cell.textLabel.text = @"Opacity (Full Screen)";
+                cell.textLabel.text = @"透明度 (全屏)";
                 sliderTouchControlsOpacity = [[UISlider alloc] initWithFrame:CGRectZero];
                 [sliderTouchControlsOpacity setMinimumValue:0.0];
                 [sliderTouchControlsOpacity setMaximumValue:100.0];
@@ -194,7 +194,7 @@
                 [sliderTouchControlsOpacity addConstraint:[NSLayoutConstraint constraintWithItem:sliderTouchControlsOpacity attribute:NSLayoutAttributeWidth relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1.0 constant:100.0]];
                 break;
             } else if (indexPath.row == 2 ) {
-                cell.textLabel.text = @"Haptic Feedback";
+                cell.textLabel.text = @"振动反馈";
                 cell.accessoryView = [self optionSwitchForKey:@"hapticButtonFeedback"];
                 break;
             }
@@ -205,7 +205,7 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text   = @"Touch Type";
+                    cell.textLabel.text   = @"触控类型";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayTouchType objectAtIndex:op.touchtype];
                     break;
@@ -213,7 +213,7 @@
                     
                 case 1:
                 {
-                    cell.textLabel.text   = @"Ways";
+                    cell.textLabel.text   = @"方向";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayStickType objectAtIndex:op.sticktype];
                     break;
@@ -221,7 +221,7 @@
                     
                 case 2:
                 {
-                    cell.textLabel.text   = @"Fullscreen Stick Size";
+                    cell.textLabel.text   = @"全屏摇杆尺寸";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayStickSizeValue objectAtIndex:op.stickSize];
                     break;
@@ -234,7 +234,7 @@
             switch (indexPath.row)
             {   case 0:
                 {
-                    cell.textLabel.text   = @"Fullscreen Buttons";
+                    cell.textLabel.text   = @"全屏按钮";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayNumbuttons objectAtIndex:op.numbuttons];
                     break;
@@ -242,7 +242,7 @@
                     
                 case 1:
                 {
-                    cell.textLabel.text   = @"Button A = B + X";
+                    cell.textLabel.text   = @"按钮 A = B + X";
                     switchAplusB  = [[UISwitch alloc] initWithFrame:CGRectZero];
                     cell.accessoryView = switchAplusB ;
                     [switchAplusB setOn:[op aplusb] animated:NO];
@@ -252,21 +252,21 @@
                 case 2:
                 {
                     
-                    cell.textLabel.text   = @"Button A as Autofire";
+                    cell.textLabel.text   = @"按钮 A 作为自动发射";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayAutofireValue objectAtIndex:op.autofire];
                     break;
                 }
                 case 3:
                 {
-                    cell.textLabel.text   = @"Buttons Size";
+                    cell.textLabel.text   = @"按钮尺寸";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayButtonSizeValue objectAtIndex:op.buttonSize];
                     break;
                 }
                 case 4:
                 {
-                    cell.textLabel.text   = @"Nintendo Button Layout";
+                    cell.textLabel.text   = @"任天堂按钮布局";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     switchBAYX  = [[UISwitch alloc] initWithFrame:CGRectZero];
                     cell.accessoryView = switchBAYX;
@@ -279,7 +279,7 @@
         }
         case 3:
         {
-            cell.textLabel.text   = @"External Controller";
+            cell.textLabel.text   = @"外部控制器";
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             cell.detailTextLabel.text = [Options.arrayControlType optionAtIndex:op.controltype];
             break;
@@ -291,21 +291,21 @@
             {   case 0:
                 {
                     cell.selectionStyle = UITableViewCellSelectionStyleBlue;
-                    cell.textLabel.text = @"Change Current Layout";
+                    cell.textLabel.text = @"改变当前按钮布局";
                     cell.textLabel.textAlignment = NSTextAlignmentCenter;
                     break;
                 }
                 case 1:
                 {
                     cell.selectionStyle = UITableViewCellSelectionStyleBlue;
-                    cell.textLabel.text = @"Reset Current Layout to Default";
+                    cell.textLabel.text = @"重置当前按钮布局";
                     cell.textLabel.textAlignment = NSTextAlignmentCenter;
                     break;
                 }
                 case 2:
                 {
                     cell.selectionStyle = UITableViewCellSelectionStyleBlue;
-                    cell.textLabel.text = @"Export Skin";
+                    cell.textLabel.text = @"导出皮肤";
                     cell.textLabel.textAlignment = NSTextAlignmentCenter;
                     break;
                 }
@@ -326,7 +326,7 @@
             switch (indexPath.row)
             {   case 0:
                 {
-                    cell.textLabel.text   = @"Touch Stick";
+                    cell.textLabel.text   = @"触控摇杆";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [arrayAnalogDZValue objectAtIndex:op.analogDeadZoneValue];
                     break;
@@ -340,7 +340,7 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text = @"Enabled";
+                    cell.textLabel.text = @"启用";
                     switchLightgunEnabled = [[UISwitch alloc] initWithFrame:CGRectZero];
                     [switchLightgunEnabled setOn:[op lightgunEnabled]];
                     [switchLightgunEnabled addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -349,8 +349,8 @@
                 }
                 case 1:
                 {
-                    cell.textLabel.text = @"Bottom Screen Reload";
-                    cell.detailTextLabel.text = @"Some games require shooting offscreen to reload";
+                    cell.textLabel.text = @"底部屏幕重载";
+                    cell.detailTextLabel.text = @"有些游戏需要在屏幕外触发才能重新加载";
                     switchLightgunBottomScreenReload = [[UISwitch alloc] initWithFrame:CGRectZero];
                     [switchLightgunBottomScreenReload setOn:[op lightgunBottomScreenReload]];
                     [switchLightgunBottomScreenReload addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -427,7 +427,7 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text = @"Enabled";
+                    cell.textLabel.text = @"启用";
                     switchTouchAnalogEnabled = [[UISwitch alloc] initWithFrame:CGRectZero];
                     [switchTouchAnalogEnabled setOn:[op touchAnalogEnabled]];
                     [switchTouchAnalogEnabled addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -436,7 +436,7 @@
                 }
                 case 1:
                 {
-                    cell.textLabel.text = @"Sensitivity";
+                    cell.textLabel.text = @"灵敏度";
                     sliderTouchAnalogSensitivity = [[UISlider alloc] initWithFrame:CGRectZero];
                     [sliderTouchAnalogSensitivity setMinimumValue:100.0];
                     [sliderTouchAnalogSensitivity setMaximumValue:1000.0];
@@ -453,7 +453,7 @@
                 }
                 case 2:
                 {
-                    cell.textLabel.text = @"Hide Touch D-Pad";
+                    cell.textLabel.text = @"隐藏触控 D-Pad";
                     switchTouchAnalogHideTouchDirectionalPad = [[UISwitch alloc] initWithFrame:CGRectZero];
                     [switchTouchAnalogHideTouchDirectionalPad setOn:[op touchAnalogHideTouchDirectionalPad]];
                     [switchTouchAnalogHideTouchDirectionalPad addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -462,7 +462,7 @@
                 }
                 case 3:
                 {
-                    cell.textLabel.text = @"Hide Touch Buttons";
+                    cell.textLabel.text = @"隐藏触控按钮";
                     switchTouchAnalogHideTouchButtons = [[UISwitch alloc] initWithFrame:CGRectZero];
                     [switchTouchAnalogHideTouchButtons setOn:[op touchAnalogHideTouchButtons]];
                     [switchTouchAnalogHideTouchButtons addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -475,7 +475,7 @@
         }
         case 10:
         {
-            cell.textLabel.text = @"Enabled";
+            cell.textLabel.text = @"启用";
             switchTouchDirectionalEnabled = [[UISwitch alloc] initWithFrame:CGRectZero];
             [switchTouchDirectionalEnabled setOn:[op touchDirectionalEnabled]];
             [switchTouchDirectionalEnabled addTarget:self action:@selector(optionChanged:) forControlEvents:UIControlEventValueChanged];

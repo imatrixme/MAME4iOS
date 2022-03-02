@@ -10,40 +10,40 @@
 
 // keys used in a NSUserDefaults
 #define FAVORITE_GAMES_KEY      @"FavoriteGames"
-#define FAVORITE_GAMES_TITLE    @"Favorite Games"
+#define FAVORITE_GAMES_TITLE    @"收藏"
 #define RECENT_GAMES_KEY        @"RecentGames"
-#define RECENT_GAMES_TITLE      @"Recently Played"
+#define RECENT_GAMES_TITLE      @"最近游玩"
 
 // keys used in a GameInfo dictionary
-#define kGameInfoType           @"type"
-#define kGameInfoSystem         @"system"
-#define kGameInfoName           @"name"
-#define kGameInfoParent         @"parent"
-#define kGameInfoYear           @"year"
-#define kGameInfoDescription    @"description"
-#define kGameInfoManufacturer   @"manufacturer"
-#define kGameInfoScreen         @"screen"
-#define kGameInfoDriver         @"driver"
-#define kGameInfoCategory       @"category"
-#define kGameInfoHistory        @"history"
-#define kGameInfoMameInfo       @"mameinfo"
-#define kGameInfoSoftware       @"software"         // list of supported software for system
-#define kGameInfoSoftwareList   @"softlist"         // this game is *from* a software list
-#define kGameInfoFile           @"file"
+#define kGameInfoType           @"类型"
+#define kGameInfoSystem         @"系统"
+#define kGameInfoName           @"名称"
+#define kGameInfoParent         @"起源"
+#define kGameInfoYear           @"年份"
+#define kGameInfoDescription    @"描述"
+#define kGameInfoManufacturer   @"厂商"
+#define kGameInfoScreen         @"屏幕"
+#define kGameInfoDriver         @"驱动"
+#define kGameInfoCategory       @"分类"
+#define kGameInfoHistory        @"历史"
+#define kGameInfoMameInfo       @"信息"
+#define kGameInfoSoftware       @"软件"         // list of supported software for system
+#define kGameInfoSoftwareList   @"列表"         // this game is *from* a software list
+#define kGameInfoFile           @"文件"
 
-#define kGameInfoTypeArcade     @"Arcade"
-#define kGameInfoTypeConsole    @"Console"
-#define kGameInfoTypeComputer   @"Computer"
+#define kGameInfoTypeArcade     @"游戏厅"
+#define kGameInfoTypeConsole    @"主机"
+#define kGameInfoTypeComputer   @"电脑"
 #define kGameInfoTypeBIOS       @"BIOS"
-#define kGameInfoTypeSnapshot   @"Snapshot"
+#define kGameInfoTypeSnapshot   @"快照"
 
-#define kGameInfoScreenHorizontal   @"Horizontal"
-#define kGameInfoScreenVertical     @"Vertical"
-#define kGameInfoScreenVector       @"Vector"
+#define kGameInfoScreenHorizontal   @"横向"
+#define kGameInfoScreenVertical     @"竖向"
+#define kGameInfoScreenVector       @"向量"
 #define kGameInfoScreenLCD          @"LCD"
 
 // special "fake" (aka built-in) games
-#define kGameInfoNameSettings   @"settings"
+#define kGameInfoNameSettings   @"设置"
 #define kGameInfoNameMameMenu   @"mameui"
 
 NS_ASSUME_NONNULL_BEGIN

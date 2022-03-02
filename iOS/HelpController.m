@@ -65,7 +65,7 @@
 
 
 - (id)init {
-    return [self initWithName:@"help.html" title:@"Help"];
+    return [self initWithName:@"help.html" title:@"帮助"];
 }
 
 - (void)loadView {
@@ -73,7 +73,7 @@
     UIView *view= [[UIView alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
 	self.view = view;
     
-    self.title = @"Help";
+    self.title = @"帮助";
     self.view.backgroundColor = [UIColor whiteColor];
     self.view.autoresizesSubviews = TRUE;
         

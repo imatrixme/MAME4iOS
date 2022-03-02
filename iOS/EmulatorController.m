@@ -385,7 +385,7 @@ void m4i_output(int channel, const char* text)
 #endif
     
     // ignore this error
-    if (channel == MYOSD_OUTPUT_ERROR && strstr(text, "Error opening translation file") != NULL)
+    if (channel == MYOSD_OUTPUT_ERROR && strstr(text, "打开转译文件出错") != NULL)
         return;
     
     // capture any error/warning output for later use.
@@ -987,7 +987,7 @@ HUDViewController* g_menu;
 #endif
 
     if (controller != nil && controller_count > 1 && myosd_num_players > 1)
-        menu.title = [NSString stringWithFormat:@"Player %d", player+1];
+        menu.title = [NSString stringWithFormat:@"玩家 %d", player+1];
     
     if(myosd_inGame && myosd_in_menu==0)
     {
@@ -1065,8 +1065,8 @@ HUDViewController* g_menu;
 
             // EXIT and MAME MENU
             [menu addButtons:@[
-                [NSString stringWithFormat:@":%@:Exit Game", getGamepadSymbol(gamepad, gamepad.buttonX)],
-                [NSString stringWithFormat:@":%@:Speed 2x", getGamepadSymbol(gamepad, gamepad.buttonA)],
+                [NSString stringWithFormat:@":%@:退出游戏", getGamepadSymbol(gamepad, gamepad.buttonX)],
+                [NSString stringWithFormat:@":%@:速度 2x", getGamepadSymbol(gamepad, gamepad.buttonA)],
             ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
                 if (button == 0)
                     [self runExit:NO];
@@ -1076,8 +1076,8 @@ HUDViewController* g_menu;
 
             // CONFIGURE and PAUSE
             [menu addButtons:@[
-                [NSString stringWithFormat:@":%@:Configure", getGamepadSymbol(gamepad, gamepad.buttonY)],
-                [NSString stringWithFormat:@":%@:Pause", getGamepadSymbol(gamepad, gamepad.buttonB)],
+                [NSString stringWithFormat:@":%@:配置", getGamepadSymbol(gamepad, gamepad.buttonY)],
+                [NSString stringWithFormat:@":%@:暂停", getGamepadSymbol(gamepad, gamepad.buttonB)],
             ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_CONFIGURE);
@@ -1088,21 +1088,21 @@ HUDViewController* g_menu;
         
         // LOAD and SAVE State
         [menu addButtons:@[
-            [NSString stringWithFormat:@":%@:Load ①", getGamepadSymbol(gamepad, gamepad.dpad.up) ?: @"bookmark"],
-            [NSString stringWithFormat:@":%@:Load ②", getGamepadSymbol(gamepad, gamepad.dpad.right) ?: @"bookmark"],
+            [NSString stringWithFormat:@":%@:加载 ①", getGamepadSymbol(gamepad, gamepad.dpad.up) ?: @"bookmark"],
+            [NSString stringWithFormat:@":%@:加载 ②", getGamepadSymbol(gamepad, gamepad.dpad.right) ?: @"bookmark"],
         ] style:(gamepad ? HUDButtonStylePlain : HUDButtonStyleDefault) handler:^(NSUInteger button) {
             mame_load_state((int)button+1);
         }];
         [menu addButtons:@[
-            [NSString stringWithFormat:@":%@:Save ①", getGamepadSymbol(gamepad, gamepad.dpad.down) ?: @"bookmark.fill"],
-            [NSString stringWithFormat:@":%@:Save ②", getGamepadSymbol(gamepad, gamepad.dpad.left) ?: @"bookmark.fill"],
+            [NSString stringWithFormat:@":%@:保存 ①", getGamepadSymbol(gamepad, gamepad.dpad.down) ?: @"bookmark.fill"],
+            [NSString stringWithFormat:@":%@:保存 ②", getGamepadSymbol(gamepad, gamepad.dpad.left) ?: @"bookmark.fill"],
         ] style:(gamepad ? HUDButtonStylePlain : HUDButtonStyleDefault) handler:^(NSUInteger button) {
             mame_save_state((int)button+1);
         }];
         
         if (gamepad == nil) {
             // CONFIGURE and PAUSE
-            [menu addButtons:@[@":slider.horizontal.3:Configure",@":pause.circle:Pause"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":slider.horizontal.3:配置",@":pause.circle:暂停"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_CONFIGURE);
                 else
@@ -1112,8 +1112,8 @@ HUDViewController* g_menu;
         BOOL put_keyboard_on_menu = (TARGET_OS_IOS && !TARGET_OS_MACCATALYST) && (myosd_has_keyboard || g_pref_allow_keyboard) && (g_keyboards.count == 0 || g_pref_force_keyboard) && gamepad == nil;
         if (put_keyboard_on_menu) {
             // KEYBOARD and SERVICE
-            NSString* kb = self.showSoftwareKeyboard ? @":keyboard.chevron.compact.down:Keyboard" : @":keyboard:Keyboard";
-            [menu addButtons:@[kb, @":wrench:Service"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            NSString* kb = self.showSoftwareKeyboard ? @":keyboard.chevron.compact.down:键盘" : @":keyboard:键盘";
+            [menu addButtons:@[kb, @":wrench:服务"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
                 if (button == 0)
                     self.showSoftwareKeyboard = !self.showSoftwareKeyboard;
                 else
@@ -1122,7 +1122,7 @@ HUDViewController* g_menu;
         }
         else {
             // SNAPSHOT and SERVICE
-            [menu addButtons:@[@":camera:Snapshot", @":wrench:Service"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":camera:快照", @":wrench:服务"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_SNAP);
                 else
@@ -1131,7 +1131,7 @@ HUDViewController* g_menu;
         }
         
         // Power and Reset
-        [menu addButtons:@[@":power:Power", @":escape:Reset"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+        [menu addButtons:@[@":power:电源", @":escape:重置"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_RESET);         // this does a HARD reset
             else
@@ -1140,33 +1140,33 @@ HUDViewController* g_menu;
 
         // show any MAME output, usually a WARNING message, we catch errors in an other place.
         if (g_mame_output_text[0]) {
-            NSString* button = @":info.circle:MAME Output";
+            NSString* button = @":info.circle:MAME 输出";
             NSString* message = [[NSString stringWithUTF8String:g_mame_output_text] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 
-            if ([message rangeOfString:@"WARNING" options:NSCaseInsensitiveSearch].location != NSNotFound)
-                button = @":exclamationmark.triangle:MAME Warning";
+            if ([message rangeOfString:@"警告" options:NSCaseInsensitiveSearch].location != NSNotFound)
+                button = @":exclamationmark.triangle:MAME 警告";
             
-            if ([message rangeOfString:@"ERROR" options:NSCaseInsensitiveSearch].location != NSNotFound)
-                button = @":xmark.octagon:MAME Error";
+            if ([message rangeOfString:@"错误" options:NSCaseInsensitiveSearch].location != NSNotFound)
+                button = @":xmark.octagon:MAME 错误";
             
             [menu addButton:button style:HUDButtonStyleDefault handler:^{
                 [self startMenu];
-                [self showAlertWithTitle:@PRODUCT_NAME message:message buttons:@[@"Continue"] handler:^(NSUInteger button) {
+                [self showAlertWithTitle:@PRODUCT_NAME message:message buttons:@[@"继续"] handler:^(NSUInteger button) {
                     [self endMenu];
                 }];
             }];
         }
     }
     
-    [menu addButton:@":gear:Settings" style:HUDButtonStyleDefault handler:^{
+    [menu addButton:@":gear:设置" style:HUDButtonStyleDefault handler:^{
         [self runSettings];
     }];
-    [menu addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:Exit Game" : @":xmark.circle:Exit" style:HUDButtonStyleDestructive handler:^{
+    [menu addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:退出游戏" : @":xmark.circle:退出" style:HUDButtonStyleDestructive handler:^{
         [self runExit:NO];
     }];
     
     if (view == nil && TARGET_OS_IOS) {
-        [menu addButton:@"Cancel" style:HUDButtonStyleCancel handler:^{}];
+        [menu addButton:@"取消" style:HUDButtonStyleCancel handler:^{}];
     }
     
     [menu onDismiss:^{
@@ -1191,14 +1191,14 @@ HUDViewController* g_menu;
 {
     if ((!myosd_inGame || myosd_in_menu == 0) && ask_user && self.presentedViewController == nil)
     {
-        NSString* yes = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓐ Yes" : @"Yes";
-        NSString* no  = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓑ No" : @"No";
+        NSString* yes = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓐ 是" : @"是";
+        NSString* no  = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓑ 否" : @"否";
         UIAlertControllerStyle style = UIAlertControllerStyleAlert;
         
         if (view != nil && self.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular && self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular)
             style = UIAlertControllerStyleActionSheet;
 
-        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"Are you sure you want to exit?" message:nil preferredStyle:style];
+        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"确实要退出吗?" message:nil preferredStyle:style];
 
         [self startMenu];
         [exitAlertController addAction:[UIAlertAction actionWithTitle:yes style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
@@ -1761,7 +1761,7 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
 
     [self scanForDevices];
     if (![MetalScreenView isSupported]) {
-        [self showAlertWithTitle:@PRODUCT_NAME message:@"Metal not supported on this device." buttons:@[] handler:nil];
+        [self showAlertWithTitle:@PRODUCT_NAME message:@"此设备不支持 Metal 技术。" buttons:@[] handler:nil];
     }
 }
 
@@ -2206,31 +2206,31 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
                     [_self startPlayer:(int)button + 2];
             }];
         }
-        [hudView addButtons:@[@":bookmark:Load ①", @":bookmark:Load ②"] handler:^(NSUInteger button) {
+        [hudView addButtons:@[@":bookmark:加载 ①", @":bookmark:加载 ②"] handler:^(NSUInteger button) {
             mame_load_state((int)button + 1);
         }];
-        [hudView addButtons:@[@":bookmark.fill:Save ①", @":bookmark.fill:Save ②"] handler:^(NSUInteger button) {
+        [hudView addButtons:@[@":bookmark.fill:保存 ①", @":bookmark.fill:保存 ②"] handler:^(NSUInteger button) {
             mame_save_state((int)button + 1);
         }];
-        [hudView addButtons:@[@":slider.horizontal.3:Configure",@":pause.circle:Pause"] handler:^(NSUInteger button) {
+        [hudView addButtons:@[@":slider.horizontal.3:配置",@":pause.circle:暂停"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_CONFIGURE);
             else
                 push_mame_key(MYOSD_KEY_P);
         }];
-        [hudView addButtons:@[@":camera:Snapshot", @":wrench:Service"] handler:^(NSUInteger button) {
+        [hudView addButtons:@[@":camera:快照", @":wrench:服务"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_SNAP);
             else
                 push_mame_key(MYOSD_KEY_SERVICE);
         }];
-        [hudView addButtons:@[@":power:Power", @":escape:Reset"] handler:^(NSUInteger button) {
+        [hudView addButtons:@[@":power:电源", @":escape:重置"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_RESET);         // this does a HARD reset
             else
                 push_mame_key(MYOSD_KEY_F3);            // this does a SOFT reset
         }];
-        [hudView addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:Exit Game" : @":xmark.circle:Exit" color:UIColor.systemRedColor handler:^{
+        [hudView addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:退出游戏" : @":xmark.circle:退出" color:UIColor.systemRedColor handler:^{
             [_self runExit:NO];
         }];
     }
@@ -2383,7 +2383,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     if ( prev_myosd_light_gun == 0 && myosd_light_gun == 1 && g_pref_lightgun_enabled ) {
         lightgun_x = 0.0;
         lightgun_y = 0.0;
-        [self.view makeToast:@"Touch Lightgun Mode Enabled!" duration:2.0 position:CSToastPositionCenter
+        [self.view makeToast:@"触控光枪模式启动！" duration:2.0 position:CSToastPositionCenter
                        title:nil image:[UIImage systemImageNamed:@"target"] style:toastStyle completion:nil];
     }
     prev_myosd_light_gun = myosd_light_gun;
@@ -2391,14 +2391,14 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     if (prev_myosd_mouse == 0 && myosd_mouse == 1 && g_pref_touch_analog_enabled ) {
         mouse_delta_x[0] = 0.0;
         mouse_delta_y[0] = 0.0;
-        [self.view makeToast:@"Touch Mouse Mode Enabled!" duration:2.0 position:CSToastPositionCenter
+        [self.view makeToast:@"触控鼠标模式启动！" duration:2.0 position:CSToastPositionCenter
                        title:nil image:[UIImage systemImageNamed:@"cursorarrow.motionlines"] style:toastStyle completion:nil];
     }
     prev_myosd_mouse = myosd_mouse;
 
     // Show a WARNING toast, but only once, and only if MAME did not show it already
     if (g_pref_showINFO == 0 && g_mame_warning_shown == 0 && g_mame_output_text[0] && strstr(g_mame_output_text, "WARNING") != NULL) {
-        [self.view makeToast:@"⚠️Game might not run correctly." duration:3.0 position:CSToastPositionBottom style:toastStyle];
+        [self.view makeToast:@"⚠️ 此游戏可能工作不正常！" duration:3.0 position:CSToastPositionBottom style:toastStyle];
         g_mame_warning_shown = 1;
     }
     
@@ -4651,7 +4651,7 @@ BOOL is_roms_dir(NSString* dir) {
     if (self.presentedViewController.isBeingPresented)
         return [self performSelector:_cmd withObject:nil afterDelay:1.0];
     
-    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Moving ROMs" message:@"Please wait..." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在移动 ROMs" message:@"请稍等..." preferredStyle:UIAlertControllerStyleAlert];
     [progressAlert setProgress:0.0 text:@""];
     [self.topViewController presentViewController:progressAlert animated:YES completion:nil];
     
@@ -4897,11 +4897,11 @@ BOOL is_roms_dir(NSString* dir) {
     NSString* msg = @"Reset " PRODUCT_NAME;
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil message:msg preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Reset Settings" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"重置设置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         [self reset];
         [self done:self];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Delete All ROMs" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"删除所有ROM" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         for (NSString* file in [EmulatorController getROMS]) {
             NSString* path = [NSString stringWithUTF8String:get_documents_path(file.UTF8String)];
             if (![NSFileManager.defaultManager removeItemAtPath:path error:nil])
@@ -4911,7 +4911,7 @@ BOOL is_roms_dir(NSString* dir) {
         [self done:self];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self.topViewController presentViewController:alert animated:YES completion:nil];
 }
 
@@ -4953,7 +4953,7 @@ BOOL is_roms_dir(NSString* dir) {
 
 -(void)resetCurrentLayout{
     
-    [self showAlertWithTitle:nil message:@"Do you want to reset current layout to default?" buttons:@[@"Yes", @"No"] handler:^(NSUInteger buttonIndex) {
+    [self showAlertWithTitle:nil message:@"是否要将当前布局重置为默认设置" buttons:@[@"是", @"否"] handler:^(NSUInteger buttonIndex) {
         if (buttonIndex == 0)
         {
             [NSFileManager.defaultManager removeItemAtPath:[self getLayoutPath] error:nil];
@@ -5684,10 +5684,10 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
     if ( server.bonjourServerURL != nil ) {
         [servers appendString:[NSString stringWithFormat:@"%@",server.bonjourServerURL]];
     }
-    NSString* welcome = @"Welcome to " PRODUCT_NAME_LONG;
-    NSString* message = [NSString stringWithFormat:@"\nTo transfer ROMs from your computer go to one of these addresses in your web browser:\n\n%@",servers];
-    NSString* title = g_no_roms_found ? welcome : @"Web Server Started";
-    NSString* done  = g_no_roms_found ? @"Reload ROMs" : @"Stop Server";
+    NSString* welcome = @"欢迎进入 " PRODUCT_NAME_LONG;
+    NSString* message = [NSString stringWithFormat:@"\n要想将 ROM 从电脑上传送到此设备，请在电脑 web 浏览器中打开以下网址:\n\n%@",servers];
+    NSString* title = g_no_roms_found ? welcome : @"Web服务器已启动";
+    NSString* done  = g_no_roms_found ? @"重载所有ROM" : @"停止服务";
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:done style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -6026,7 +6026,7 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
     // TODO: eventualy run multiple benchmarks, but for now just benchmark the current game
     NSString* title = @"Benchmarking";
     NSString* msg = g_mame_game_info.gameDescription;
-    [self showAlertWithTitle:title message:msg buttons:@[@"Cancel"] handler:^(NSUInteger button) {
+    [self showAlertWithTitle:title message:msg buttons:@[@"取消"] handler:^(NSUInteger button) {
         g_mame_benchmark = FALSE;
         [self restart];
     }];

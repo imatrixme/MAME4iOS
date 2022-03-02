@@ -16,13 +16,13 @@
 #pragma mark - class properties
 
 + (NSArray*)arrayEmuSpeed {
-    return @[@"Default",@"50%",@"60%",@"70%",@"80%",@"85%",@"90%",@"95%",@"100%",@"105%",@"110%",@"115%",@"120%",@"130%",@"140%",@"150%"];
+    return @[@"默认",@"50%",@"60%",@"70%",@"80%",@"85%",@"90%",@"95%",@"100%",@"105%",@"110%",@"115%",@"120%",@"130%",@"140%",@"150%"];
 }
 + (NSArray*)arrayControlType {
-    return @[@"Keyboard",@"iCade or compatible",@"iCP, Gametel",@"iMpulse"];
+    return @[@"键盘",@"iCade或兼容",@"iCP, Gametel",@"iMpulse"];
 }
 + (NSArray*)arraySoundValue {
-    return @[@"Off", @"On (11 KHz)", @"On (22 KHz)",@"On (33 KHz)", @"On (44 KHz)", @"On (48 KHz)"];
+    return @[@"关闭", @"开启 (11 KHz)", @"开启 (22 KHz)",@"开启 (33 KHz)", @"开启 (44 KHz)", @"开启 (48 KHz)"];
 }
 
 + (NSArray*)arraySkin {

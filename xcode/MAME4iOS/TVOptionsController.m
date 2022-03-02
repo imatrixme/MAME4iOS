@@ -16,7 +16,7 @@
 @implementation TVOptionsController
 
 - (void)viewDidLoad {
-    self.title = NSLocalizedString(@"Settings", @"");
+    self.title = NSLocalizedString(@"设置", @"");
     
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(menuPress)];
     tap.allowedPressTypes = @[[NSNumber numberWithInteger:UIPressTypeMenu]];

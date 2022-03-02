@@ -57,22 +57,24 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = NSLocalizedString(@"Settings", @"");
+    self.title = NSLocalizedString(@"设置", @"");
     
     UILabel* pad = [[UILabel alloc] init];
     pad.text = @" ";
     
-    UIImageView* logo = [[UIImageView alloc] initWithImage:[[UIImage imageNamed:@"mame_logo"] scaledToSize:CGSizeMake(300, 0)]];
+    UIImageView* logo = [[UIImageView alloc] initWithImage:[[UIImage imageNamed:@"mame_logo"] scaledToSize:CGSizeMake(280, 0)]];
     logo.contentMode = UIViewContentModeScaleAspectFit;
     
     UILabel* info = [[UILabel alloc] init];
     info.text = [self.applicationVersionInfo stringByAppendingString:@"\n"];
+    info.font = [UIFont systemFontOfSize:12];
     info.textAlignment = NSTextAlignmentCenter;
     info.numberOfLines = 0;
     
     UIStackView* stack = [[UIStackView alloc] initWithArrangedSubviews:@[pad, logo, info]];
     stack.axis = UILayoutConstraintAxisVertical;
     stack.alignment = UIStackViewAlignmentFill;
+    stack.spacing = 8.f;
     stack.distribution = UIStackViewDistributionEqualSpacing;
     
     [stack setNeedsLayout]; [stack layoutIfNeeded];
@@ -98,14 +100,14 @@
            {
                case 0:
                {
-                   cell.textLabel.text   = @"Help";
+                   cell.textLabel.text   = @"帮助";
                    cell.imageView.image = [UIImage systemImageNamed:@"questionmark.circle"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
                }
                case 1:
                {
-                   cell.textLabel.text   = @"What's New";
+                   cell.textLabel.text   = @"新特性";
                    cell.imageView.image = [UIImage systemImageNamed:@"info.circle"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
@@ -119,47 +121,47 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text = @"Filter";
+                    cell.textLabel.text = @"滤波器";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [Options.arrayFilter optionFind:op.filter];
                     break;
                 }
                 case 1:
                 {
-                    cell.textLabel.text   = @"Skin";
+                    cell.textLabel.text   = @"皮肤";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [Options.arraySkin optionFind:op.skin];
                     break;
                 }
                 case 2:
                 {
-                    cell.textLabel.text   = @"Screen Shader";
+                    cell.textLabel.text   = @"屏幕着色器";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [Options.arrayScreenShader optionFind:op.screenShader];
                     break;
                 }
                 case 3:
                 {
-                    cell.textLabel.text   = @"Vector Shader";
+                    cell.textLabel.text   = @"矢量着色器";
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     cell.detailTextLabel.text = [Options.arrayLineShader optionFind:op.lineShader];
                     break;
                 }
                case 4:
                {
-                    cell.textLabel.text   = @"Keep Aspect Ratio";
+                    cell.textLabel.text   = @"保持长宽比";
                     cell.accessoryView = [self optionSwitchForKey:@"keepAspectRatio"];
                    break;
                }
                case 5:
                {
-                   cell.textLabel.text   = @"Force Integer Scaling";
+                   cell.textLabel.text   = @"强制整数倍放大";
                    cell.accessoryView = [self optionSwitchForKey:@"integerScalingOnly"];
                    break;
                }
                case 6:
                {
-                   cell.textLabel.text   = @"Force Pixel Aspect";
+                   cell.textLabel.text   = @"强制像素适配";
                    cell.accessoryView = [self optionSwitchForKey:@"forcepxa"];
                    break;
                }
@@ -172,13 +174,13 @@
            {
                case 0:
                 {
-                    cell.textLabel.text = @"Beam 2x";
+                    cell.textLabel.text = @"光线 2x";
                     cell.accessoryView = [self optionSwitchForKey:@"vbean2x"];
                     break;
                 }
                 case 1:
                 {
-                    cell.textLabel.text = @"Flicker";
+                    cell.textLabel.text = @"闪烁";
                     cell.accessoryView = [self optionSwitchForKey:@"vflicker"];
                     break;
                 }
@@ -191,19 +193,19 @@
            {
                case 0:
                {
-                   cell.textLabel.text   = @"Fullscreen (Portrait)";
+                   cell.textLabel.text   = @"全屏 (竖屏)";
                    cell.accessoryView = [self optionSwitchForKey:@"fullscreenPortrait"];
                    break;
                }
                case 1:
                {
-                   cell.textLabel.text   = @"Fullscreen (Landscape)";
+                   cell.textLabel.text   = @"全屏 (横屏)";
                    cell.accessoryView = [self optionSwitchForKey:@"fullscreenLandscape"];
                    break;
                }
                case 2:
                {
-                   cell.textLabel.text   = @"Fullscreen (Controller)";
+                   cell.textLabel.text   = @"全屏 (控制器)";
                    cell.accessoryView = [self optionSwitchForKey:@"fullscreenJoystick"];
                    break;
                }
@@ -217,50 +219,50 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text   = @"Show FPS";
+                    cell.textLabel.text   = @"显示 FPS";
                     cell.accessoryView = [self optionSwitchForKey:@"showFPS"];
                     break;
                 }
                 case 1:
                 {
-                    cell.textLabel.text   = @"Show HUD";
+                    cell.textLabel.text   = @"显示 HUD";
                     cell.accessoryView = [self optionSwitchForKey:@"showHUD"];
                     break;
                 }
                 case 2:
                 {
-                    cell.textLabel.text   = @"Show Info/Warnings";
+                    cell.textLabel.text   = @"显示 信息/警告";
                     cell.accessoryView = [self optionSwitchForKey:@"showINFO"];
                     break;
                 }
                 case 3:
                 {
-                     cell.textLabel.text = @"Cheats";
+                     cell.textLabel.text = @"金手指";
                      cell.accessoryView = [self optionSwitchForKey:@"cheats"];
                      break;
                 }
                 case 4:
                 {
-                     cell.textLabel.text   = @"Save Hiscores";
+                     cell.textLabel.text   = @"保存最高分";
                      cell.accessoryView = [self optionSwitchForKey:@"hiscore"];
                      break;
                 }
                 case 5:
                 {
-                     cell.textLabel.text   = @"Use DRC";
+                     cell.textLabel.text   = @"使用 DRC";
                      cell.accessoryView = [self optionSwitchForKey:@"useDRC"];
                      break;
                 }
                 case 6:
                 {
-                     cell.textLabel.text   = @"Emulated Speed";
+                     cell.textLabel.text   = @"模拟器速度";
                      cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                      cell.detailTextLabel.text = [Options.arrayEmuSpeed optionAtIndex:op.emuspeed];
                      break;
                 }
                 case 7:
                 {
-                     cell.textLabel.text   = @"Sound";
+                     cell.textLabel.text   = @"声音";
                      cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                      cell.detailTextLabel.text = [Options.arraySoundValue optionAtIndex:op.soundValue];
                      break;
@@ -274,19 +276,19 @@
            {
                case 0:
                {
-                   cell.textLabel.text   = @"Hide Clones";
+                   cell.textLabel.text   = @"隐藏复刻版游戏";
                    cell.accessoryView = [self optionSwitchForKey:@"filterClones"];
                    break;
                }
                case 1:
                {
-                   cell.textLabel.text   = @"Hide Not Working";
+                   cell.textLabel.text   = @"隐藏有问题的游戏";
                    cell.accessoryView = [self optionSwitchForKey:@"filterNotWorking"];
                    break;
                }
                case 2:
                {
-                   cell.textLabel.text   = @"Hide BIOS";
+                   cell.textLabel.text   = @"隐藏 BIOS";
                    cell.accessoryView = [self optionSwitchForKey:@"filterBIOS"];
                    break;
                }
@@ -299,7 +301,7 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text = @"Game Input";
+                    cell.textLabel.text = @"游戏输入控制";
                     cell.imageView.image = [UIImage systemImageNamed:@"gamecontroller"];
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     break;
@@ -313,28 +315,28 @@
            {
                case 0:
                {
-                   cell.textLabel.text = @"Import";
+                   cell.textLabel.text = @"导入";
                    cell.imageView.image = [UIImage systemImageNamed:@"square.and.arrow.down.on.square"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
                }
                case 1:
                {
-                   cell.textLabel.text = @"Export";
+                   cell.textLabel.text = @"导出";
                    cell.imageView.image = [UIImage systemImageNamed:@"square.and.arrow.up.on.square"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
                }
                case 2:
                {
-                   cell.textLabel.text = @"Start Web Server";
+                   cell.textLabel.text = @"开启文件服务";
                    cell.imageView.image = [UIImage systemImageNamed:@"arrow.up.arrow.down.circle"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
                }
                case 3:
                {
-                   cell.textLabel.text = @"Show Files";
+                   cell.textLabel.text = @"显示所有文件";
                    cell.imageView.image = [UIImage systemImageNamed:@"folder"];
                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                    break;
@@ -348,28 +350,28 @@
             {
                 case 0:
                 {
-                    cell.textLabel.text = @"Export to iCloud";
+                    cell.textLabel.text = @"导出到 iCloud";
                     cell.imageView.image = [UIImage systemImageNamed:@"icloud.and.arrow.up"];
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     break;
                 }
                 case 1:
                 {
-                    cell.textLabel.text = @"Import from iCloud";
+                    cell.textLabel.text = @"从 iCloud 导入";
                     cell.imageView.image = [UIImage systemImageNamed:@"icloud.and.arrow.down"];
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     break;
                 }
                 case 2:
                 {
-                    cell.textLabel.text = @"Sync with iCloud";
+                    cell.textLabel.text = @"同步至 iCloud";
                     cell.imageView.image = [UIImage systemImageNamed:@"arrow.clockwise.icloud"];
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     break;
                 }
                 case 3:
                 {
-                    cell.textLabel.text = @"Erase iCloud";
+                    cell.textLabel.text = @"从 iCloud 中擦除";
                     cell.imageView.image = [UIImage systemImageNamed:@"xmark.icloud"];
                     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                     break;
@@ -385,11 +387,11 @@
                 {
                     cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
 
-                    cell.textLabel.text = @"Reset to Defaults";
+                    cell.textLabel.text = @"重置为默认";
                     cell.textLabel.textColor = [UIColor whiteColor];
                     cell.textLabel.shadowColor = [UIColor blackColor];
                     cell.textLabel.textAlignment = NSTextAlignmentCenter;
-                    cell.textLabel.font = [UIFont boldSystemFontOfSize:24.0];
+                    cell.textLabel.font = [UIFont boldSystemFontOfSize:18.0];
                     cell.backgroundColor = [UIColor systemRedColor];
                     break;
                 }
@@ -404,11 +406,11 @@
                {
                    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
 
-                   cell.textLabel.text = @"Benchmark";
+                   cell.textLabel.text = @"性能基准";
                    cell.textLabel.textColor = [UIColor whiteColor];
                    cell.textLabel.shadowColor = [UIColor blackColor];
                    cell.textLabel.textAlignment = NSTextAlignmentCenter;
-                   cell.textLabel.font = [UIFont boldSystemFontOfSize:24.0];
+                   cell.textLabel.font = [UIFont boldSystemFontOfSize:18.0];
                    cell.backgroundColor = self.view.tintColor; // [UIColor systemBlueColor];
                    break;
                }
@@ -431,18 +433,18 @@
     switch (section)
     {
         case kSupportSection: return nil;
-        case kFullscreenSection: return @"Fullscreen";
-        case kVideoSection: return @"Video Options";
-        case kVectorSection: return @"Vector Options";
-        case kMiscSection: return @"Options";
-        case kFilterSection: return @"Game Filter";
+        case kFullscreenSection: return @"全屏";
+        case kVideoSection: return @"视频选项";
+        case kVectorSection: return @"矢量选项";
+        case kMiscSection: return @"选项";
+        case kFilterSection: return @"游戏滤波器";
         case kOtherSection: return @""; // @"Other";
-        case kImportSection: return @"Import and Export";
+        case kImportSection: return @"导入/导出";
         case kCloudImportSection: return @"iCloud";
         case kResetSection: return @"";
         case kBenchmarkSection: return @"";
     }
-    return @"Error!";
+    return @"错误!";
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -487,7 +489,7 @@
                 [[self navigationController] pushViewController:controller animated:YES];
             }
             if (row==1){
-                HelpController *controller = [[HelpController alloc] initWithName:@"WHATSNEW.html" title:@"What's New"];
+                HelpController *controller = [[HelpController alloc] initWithName:@"WHATSNEW.html" title:@"新特性"];
                 [[self navigationController] pushViewController:controller animated:YES];
             }
             break;
@@ -561,7 +563,7 @@
                 [CloudSync sync];
             }
             if (row==3) {
-                [self showAlertWithTitle:@"Erase iCloud?" message:nil buttons:@[@"Erase", @"Cancel"] handler:^(NSUInteger button) {
+                [self showAlertWithTitle:@"从 iCloud 中擦除?" message:nil buttons:@[@"擦除", @"取消"] handler:^(NSUInteger button) {
                     if (button == 0)
                         [CloudSync delete];
                 }];
