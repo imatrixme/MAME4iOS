@@ -1198,7 +1198,7 @@ HUDViewController* g_menu;
         if (view != nil && self.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular && self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular)
             style = UIAlertControllerStyleActionSheet;
 
-        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"确实要退出吗?" message:nil preferredStyle:style];
+        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"确实要退出吗?" message:@"直接退出将丢失进度，如果想保存进度，请先存档再退出。\n现在要直接退出吗？" preferredStyle:style];
 
         [self startMenu];
         [exitAlertController addAction:[UIAlertAction actionWithTitle:yes style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
