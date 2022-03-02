@@ -1740,8 +1740,10 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     [self performSelectorOnMainThread:@selector(setupGameControllers) withObject:nil waitUntilDone:NO];
     
     toastStyle = [CSToastManager sharedStyle];
-    toastStyle.backgroundColor = [UIColor colorWithWhite:0.111 alpha:0.80];
+    toastStyle.backgroundColor = [UIColor colorWithWhite:0.111 alpha:0.70];
     toastStyle.messageColor = [UIColor whiteColor];
+    toastStyle.messageFont = [UIFont systemFontOfSize:13];
+    toastStyle.titleFont = [UIFont systemFontOfSize:13];
     toastStyle.imageSize = CGSizeMake(toastStyle.messageFont.lineHeight, toastStyle.messageFont.lineHeight);
     
     mouseInitialLocation = CGPointMake(9111, 9111);
