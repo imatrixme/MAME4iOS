@@ -51,7 +51,7 @@ private let _destructiveButtonColor = UIColor.systemRed.withAlphaComponent(0.5)
 private let _cancelButtonColor = UIColor.systemRed.withAlphaComponent(0.5)
 private let _grabHandleColor = _defaultButtonColor
 private let _grabHandleSize = 4.0
-private let _borderWidth = 4.0
+private let _borderWidth = 2.0
 private let _fontTitleF = 1.25
 private let _animateDuration = 0.150
 
@@ -450,7 +450,7 @@ final class TVAlertController: UIViewController {
         stack1.frame = CGRect(x:inset.left, y:0, width:rect.inset(by:inset).width, height:size1.height)
         scroll.contentSize = CGSize(width:rect.width, height:size1.height)
 
-        let safe = view.bounds.inset(by: view.safeAreaInsets)
+        let safe = view.bounds.inset(by: inset)
         content.center = CGPoint(x: safe.midX, y: safe.midY)
         
         if _borderWidth != 0.0 && isFullscreen {
@@ -556,7 +556,7 @@ final class TVAlertController: UIViewController {
         label.font = isTitle ? .boldSystemFont(ofSize: font.pointSize * _fontTitleF) : font
         label.numberOfLines = 0
         label.textAlignment = align
-        label.preferredMaxLayoutWidth = maxWidth
+        label.preferredMaxLayoutWidth = maxWidth - inset.left - inset.right
         label.text = text
         return label
     }
