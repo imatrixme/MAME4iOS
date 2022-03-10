@@ -27,15 +27,25 @@
 #define kGameInfoCategory       @"分类"
 #define kGameInfoHistory        @"历史"
 #define kGameInfoMameInfo       @"信息"
-#define kGameInfoSoftware       @"软件"         // list of supported software for system
+#define kGameInfoSoftwareMedia  @"软件"         // list of supported software for system
 #define kGameInfoSoftwareList   @"列表"         // this game is *from* a software list
 #define kGameInfoFile           @"文件"
+#define kGameInfoMediaType      @"媒体"
 
 #define kGameInfoTypeArcade     @"游戏厅"
 #define kGameInfoTypeConsole    @"主机"
 #define kGameInfoTypeComputer   @"电脑"
 #define kGameInfoTypeBIOS       @"BIOS"
 #define kGameInfoTypeSnapshot   @"快照"
+#define kGameInfoTypeSoftware   @"软件"
+
+#define kGameInfoMediaCartridge @"cart"
+#define kGameInfoMediaMemcard   @"memc"
+#define kGameInfoMediaFloppy    @"flop"
+#define kGameInfoMediaHard      @"hard"
+#define kGameInfoMediaCassette  @"cass"
+#define kGameInfoMediaQuick     @"quik"
+#define kGameInfoMediaCDROM     @"cdrm"
 
 #define kGameInfoScreenHorizontal   @"横向"
 #define kGameInfoScreenVertical     @"竖向"
@@ -45,6 +55,7 @@
 // special "fake" (aka built-in) games
 #define kGameInfoNameSettings   @"设置"
 #define kGameInfoNameMameMenu   @"mameui"
+#define kGameInfoNameAddROMS    @"settings-add-roms"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -60,9 +71,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) NSString* gameDriver;
 @property (nonatomic, strong, readonly) NSString* gameScreen;
 @property (nonatomic, strong, readonly) NSString* gameCategory;
-@property (nonatomic, strong, readonly) NSString* gameSoftware;
+@property (nonatomic, strong, readonly) NSString* gameSoftwareMedia;
 @property (nonatomic, strong, readonly) NSString* gameSoftwareList;
 @property (nonatomic, strong, readonly) NSString* gameFile;
+@property (nonatomic, strong, readonly) NSString* gameMediaType;
 
 @property (nonatomic, strong, readonly) NSString* gameTitle;
 @property (nonatomic, strong, readonly) NSURL* gameImageURL;
@@ -74,6 +86,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) BOOL gameIsMame;
 @property (nonatomic, readonly) BOOL gameIsSnapshot;
 @property (nonatomic, readonly) BOOL gameIsClone;
+@property (nonatomic, readonly) BOOL gameIsConsole;
+@property (nonatomic, readonly) BOOL gameIsSoftware;
 
 @end
 
