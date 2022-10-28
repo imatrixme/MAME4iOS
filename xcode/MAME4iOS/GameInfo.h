@@ -10,9 +10,9 @@
 
 // keys used in a NSUserDefaults
 #define FAVORITE_GAMES_KEY      @"FavoriteGames"
-#define FAVORITE_GAMES_TITLE    @"Favorite Games"
+#define FAVORITE_GAMES_TITLE    @"收藏游戏"
 #define RECENT_GAMES_KEY        @"RecentGames"
-#define RECENT_GAMES_TITLE      @"Recently Played"
+#define RECENT_GAMES_TITLE      @"最近游玩"
 
 // TODO: find a way to remove these keys, or make them avail from ObjC from Swift.
 
@@ -35,12 +35,12 @@
 #define kGameInfoMediaType      @"media"
 #define kGameInfoCustomCmdline  @"cmdline"
 
-#define kGameInfoTypeArcade     @"Arcade"
-#define kGameInfoTypeConsole    @"Console"
-#define kGameInfoTypeComputer   @"Computer"
+#define kGameInfoTypeArcade     @"街机"
+#define kGameInfoTypeConsole    @"控制器"
+#define kGameInfoTypeComputer   @"电脑"
 #define kGameInfoTypeBIOS       @"BIOS"
-#define kGameInfoTypeSnapshot   @"Snapshot"
-#define kGameInfoTypeSoftware   @"Software"
+#define kGameInfoTypeSnapshot   @"快照"
+#define kGameInfoTypeSoftware   @"软件"
 
 #define kGameInfoMediaCartridge @"cart"
 #define kGameInfoMediaMemcard   @"memc"

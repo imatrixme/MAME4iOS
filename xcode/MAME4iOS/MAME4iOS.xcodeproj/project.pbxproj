@@ -292,7 +292,7 @@
 /* Begin PBXFileReference section */
 		920BBDED201FC29700AE7D50 /* dpad.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = dpad.png; path = "../../iOS-res/dpad.png"; sourceTree = "<group>"; };
 		920BBDF020210C3700AE7D50 /* menu.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = menu.png; path = "../../iOS-res/menu.png"; sourceTree = "<group>"; };
-		925ABCE21E46DCC500997182 /* MAME4iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MAME4iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		925ABCE21E46DCC500997182 /* MAME.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MAME.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		925ABCE41E46DD6E00997182 /* libmame.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libmame.a; path = ../../libmame.a; sourceTree = "<group>"; };
 		926C76FD21F1C87700103EDE /* TVOptionsController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVOptionsController.h; sourceTree = "<group>"; };
 		926C76FE21F1C87700103EDE /* TVOptionsController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TVOptionsController.m; sourceTree = "<group>"; };
@@ -758,7 +758,7 @@
 		CEE680861635BA7000051BC2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				925ABCE21E46DCC500997182 /* MAME4iOS.app */,
+				925ABCE21E46DCC500997182 /* MAME.app */,
 				92ECB8EB21EA984D00D1E3D0 /* MAME4tvOS.app */,
 				EFEEA4B125C9D41E00314132 /* TopShelf.appex */,
 			);
@@ -1007,7 +1007,7 @@
 			);
 			name = MAME4iOS;
 			productName = MAME4iOS;
-			productReference = 925ABCE21E46DCC500997182 /* MAME4iOS.app */;
+			productReference = 925ABCE21E46DCC500997182 /* MAME.app */;
 			productType = "com.apple.product-type.application";
 		};
 		92ECB8EA21EA984D00D1E3D0 /* MAME4tvOS */ = {
@@ -1363,6 +1363,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2022.4;
 				DEVELOPMENT_TEAM = FST9TRGQ7J;
 				ENABLE_BITCODE = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
@@ -1373,6 +1374,7 @@
 				);
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "MAME4iOS/MAME4iOS-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = MAME;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1384,9 +1386,11 @@
 					"$(PROJECT_DIR)/MAME4iOS",
 					"$(PROJECT_DIR)",
 				);
+				MARKETING_VERSION = 2022.4;
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.matrixme.mame4ios;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_NAME = MAME;
+				PRODUCT_NAME = MAME;
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTS_MACCATALYST = YES;
@@ -1395,6 +1399,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VALID_ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				VERSIONING_SYSTEM = "apple-generic";
 				WRAPPER_EXTENSION = app;
 			};
 			name = Debug;
@@ -1407,12 +1412,14 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2022.4;
 				DEVELOPMENT_TEAM = FST9TRGQ7J;
 				ENABLE_BITCODE = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "MAME4iOS/MAME4iOS-Prefix.pch";
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "MAME4iOS/MAME4iOS-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = MAME;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1424,9 +1431,11 @@
 					"$(PROJECT_DIR)/MAME4iOS",
 					"$(PROJECT_DIR)",
 				);
+				MARKETING_VERSION = 2022.4;
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.matrixme.mame4ios;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_NAME = MAME;
+				PRODUCT_NAME = MAME;
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTS_MACCATALYST = YES;
@@ -1434,6 +1443,7 @@
 				SWIFT_OBJC_INTERFACE_HEADER_NAME = "$(PROJECT_NAME)-Swift.h";
 				SWIFT_VERSION = 5.0;
 				VALID_ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				VERSIONING_SYSTEM = "apple-generic";
 				WRAPPER_EXTENSION = app;
 			};
 			name = Release;

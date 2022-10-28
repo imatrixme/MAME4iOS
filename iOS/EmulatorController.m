@@ -1453,37 +1453,37 @@ UIViewController* g_menu;
 }
 
 - (void)runAddROMS:(id)from {
-    NSString* title = g_no_roms_found ? @"Welcome to " PRODUCT_NAME_LONG : @"Add ROMs";
+    NSString* title = g_no_roms_found ? @"Welcome to " PRODUCT_NAME_LONG : @"添加 ROM";
 #if TARGET_OS_TV
-    NSString* message = @"To transfer ROMs from your computer, Start Web Server or Import ROMs.";
+    NSString* message = @"要从计算机转移rom，请启动Web服务器或导入rom。";
 #else
-    NSString* message = @"To transfer ROMs from your computer, Start Web Server, Import ROMs, or use AirDrop.";
+    NSString* message = @"要从计算机传输rom，请启动Web服务器、导入rom或使用AirDrop。";
 #endif
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
 #if TARGET_OS_IOS
-    [alert addAction:[UIAlertAction actionWithTitle:@"Import ROMs" symbol:@"square.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"导入 ROM" symbol:@"square.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
         [self runImport];
     }]];
 #endif
     if (CloudSync.status == CloudSyncStatusAvailable)
     {
-        [alert addAction:[UIAlertAction actionWithTitle:@"Import from iCloud" symbol:@"icloud.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"从 iCloud 导入" symbol:@"icloud.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
             [CloudSync import];
         }]];
     }
 #if TARGET_OS_IOS
-    [alert addAction:[UIAlertAction actionWithTitle:@"Show Files" symbol:@"folder" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"显示文件" symbol:@"folder" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
         [self runShowFiles];
     }]];
 #endif
-    [alert addAction:[UIAlertAction actionWithTitle:@"Start Web Server" symbol:@"arrow.up.arrow.down.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"启动 Web 服务" symbol:@"arrow.up.arrow.down.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
         [self runServer];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Reload ROMs" symbol:@"arrow.2.circlepath.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"重载 ROM" symbol:@"arrow.2.circlepath.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self reload];  /* exit mame menu and re-scan ROMs*/
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         g_no_roms_found_canceled = TRUE; // dont ask again
         if (self.presentedViewController == nil)
             [self reload];  /* exit mame menu and re-scan ROMs*/
