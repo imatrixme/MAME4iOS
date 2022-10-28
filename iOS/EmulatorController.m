@@ -79,8 +79,6 @@
 #import "SteamController.h"
 #import "SkinManager.h"
 #import "CloudSync.h"
-#import "InfoHUD.h"
-#import "AVPlayerView.h"
 #import "SoftwareList.h"
 
 #import "Timer.h"
@@ -89,6 +87,7 @@ TIMER_INIT(timer_read_input)
 TIMER_INIT(timer_read_controllers)
 TIMER_INIT(timer_read_mice)
 TIMER_INIT(load_cat)
+TIMER_INIT(mame_boot)
 TIMER_INIT_END
 
 // declare "safe" properties for buttonHome, buttonMenu, buttonsOptions that work on pre-iOS 13,14
@@ -129,7 +128,7 @@ TIMER_INIT_END
 #define NSLog(...) (void)0
 #endif
 
-static int myosd_exitGame = 0;      // set this to cause MAME to exit.
+static int myosd_exitGame = 0;      // set this to cause MAME to exit. 1=ESC, 2=force exit
 static int myosd_vis_width;         // MAME screen size
 static int myosd_vis_height;        //
 static int myosd_min_width;         // MAME render target size (pixel)
@@ -283,15 +282,19 @@ static SoftwareList* g_softlist;
 #define kHUDPositionPortKey  @"hud_rect_port"
 #define kHUDScalePortKey     @"hud_scale_port"
 #define kSelectedGameInfoKey @"selected_game_info"
-static NSDictionary* g_mame_game_info;
+static GameInfo* g_mame_game_info;
 static BOOL g_mame_reset = FALSE;           // do a full reset (delete cfg files) before running MAME
-static char g_mame_system[16+1];            // system MAME should run
-static char g_mame_game[16+1];              // game MAME should run (or empty is menu)
-static char g_mame_game_error[16+16+1+1];   // name of the system/game that got an error.
+static char g_mame_system[64];              // system MAME should run
+static char g_mame_type[16];                // game type (-cart, -flop, ...) or empty
+static char g_mame_game[256];               // game (or file) MAME should run (or empty is menu)
+static char g_mame_options[1024];           // extra options to pass to MAME
+static char g_mame_game_error[64+256];      // name of the system/game that got an error.
 static char g_mame_output_text[4096];       // any ERROR, WARNING, or INFO text output while running game
 static BOOL g_mame_warning_shown = FALSE;
 static BOOL g_mame_benchmark = FALSE;       // if TRUE run game in benchmark mode (-bench 90)
+static BOOL g_mame_first_boot = FALSE;      // TRUE the first time MAME runs
 static BOOL g_no_roms_found = FALSE;
+static BOOL g_no_roms_found_canceled = FALSE;
 
 #define OPTIONS_RELOAD_KEYS     @[@"filterClones", @"filterNotWorking", @"filterBIOS"]
 #define OPTIONS_RESTART_KEYS    @[@"cheats", @"autosave", @"hiscore", @"vbean2x", @"vflicker", @"soundValue", @"useDRC"]
@@ -385,7 +388,7 @@ void m4i_output(int channel, const char* text)
 #endif
     
     // ignore this error
-    if (channel == MYOSD_OUTPUT_ERROR && strstr(text, "打开转译文件出错") != NULL)
+    if (channel == MYOSD_OUTPUT_ERROR && strstr(text, "Error opening translation file") != NULL)
         return;
     
     // capture any error/warning output for later use.
@@ -405,11 +408,8 @@ void m4i_game_start(myosd_game_info* game_info);
 void m4i_game_stop(void);
 
 // run MAME (or pass NULL for main menu)
-int run_mame(char* system, char* game)
+int run_mame(char* system, char* type, char* game, char* options)
 {
-    // use -nocoinlock as a do-nothing option
-    char* nada = "-nocoinlock";
-
     char speed[16];
     snprintf(speed, sizeof(speed), "%0.2f", (float)g_pref_speed / 100.0);
     
@@ -428,42 +428,78 @@ int run_mame(char* system, char* game)
     // MAME always does a snapshot after a benchmark, so save it in the root so we dont liter snaps all over
     if (bench)
         strcpy(snap, "benchmark");
-
-    char* argv[] = {"mame4ios",
-        (system && system[0] != 0) ? system : nada,
-        (game && game[0] != 0 && game[0] != ' ') ? game : nada,
-        "-nocoinlock",
-        g_pref_cheat ? "-cheat" : "-nocheat",
-        g_pref_autosave ? "-autosave" : "-noautosave",      // TODO: this is not connected to any UI
-        g_pref_showINFO ? "-noskip_gameinfo" : "-skip_gameinfo",
-        "-speed", speed,
-        
-        // TODO: change the useDRC default if the arm64 version starts working.
-        is139 ? nada : (g_pref_drc ? "-drc" : "-nodrc"),
-
-        // 139: -hiscore OR -nohiscore
-        // 2xx: -plugin hiscore OR nada
-        g_pref_hiscore ? (is139 ? "-hiscore" : "-plugin") : (is139 ? "-nohiscore" : nada),
-        g_pref_hiscore ? (is139 ?       nada : "hiscore") : (is139 ?         nada : nada),
-
-        "-flicker", g_pref_vector_flicker ? "0.4" : "0.0",
-        "-beam", g_pref_vector_beam2x ? "2.5" : "1.0",
-        "-pause_brightness", "1.0",  // to debug shaders
-        "-snapname", snap,
-        
-        // 139: -samplerate XXX OR -nosound
-        // 2xx: -samplerate XXX OR -sound none
-        g_pref_sound_value != 0 ? "-samplerate" : is139 ? "-nosound" : "-sound",
-        g_pref_sound_value != 0 ?         sound : is139 ?       nada :   "none",
-        
-        bench ? "-bench" : nada,
-        bench ?     "90" : nada,
-#ifdef DEBUG
-        "-verbose",
-#endif
-        };
     
-    int argc = sizeof(argv) / sizeof(argv[0]);
+    int argc = 1;
+    char* argv[256] = {"mame4ios"};
+    #define ARG(arg) (argv[argc++] = arg)
+    #define ARG2(arg1,arg2) (ARG(arg1), ARG(arg2))
+
+    if (system && system[0] != 0)
+        ARG(system);
+
+    if (type && type[0] != 0)
+        ARG(type);
+
+    if (game && game[0] != 0 && game[0] != ' ')
+        ARG(game);
+
+    ARG("-nocoinlock");
+    ARG(g_pref_cheat ? "-cheat" : "-nocheat");
+    
+    ARG(g_pref_autosave ? "-autosave" : "-noautosave"); // TODO: this is not connected to any UI
+    ARG(g_pref_showINFO ? "-noskip_gameinfo" : "-skip_gameinfo");
+    
+    ARG2("-speed", speed);
+        
+    // TODO: change the useDRC default if the arm64 version starts working.
+    if (!is139)
+        ARG(g_pref_drc ? "-drc" : "-nodrc");
+    
+    // 139: -hiscore OR -nohiscore
+    // 2xx: -plugin hiscore OR nada
+    if (is139)
+        ARG(g_pref_hiscore ? "-hiscore" : "-nohiscore");
+    else if (g_pref_hiscore)
+        ARG2("-plugin", "hiscore");
+         
+    ARG2("-flicker", g_pref_vector_flicker ? "0.4" : "0.0");
+    ARG2("-beam", g_pref_vector_beam2x ? "2.5" : "1.0");
+    
+    ARG2("-pause_brightness", "1.0");  // to debug shaders
+    ARG2("-snapname", snap);
+        
+    // 139: -samplerate XXX OR -nosound
+    // 2xx: -samplerate XXX OR -sound none
+    if (g_pref_sound_value != 0)
+        ARG2("-samplerate", sound);
+    else if (is139)
+        ARG("-nosound");
+    else
+        ARG2("-sound", "none");
+    
+    if (bench)
+        ARG2("-bench", "90");
+    
+    // HACK: iOS app on macOS: MAME will deadlock or crash if more than one worker thread is used....
+    // HACK: ....terminating with `uncaught exception of type emu_fatalerror: discrete_task::process: available samples are negative`
+    // TODO: ...investigate this and fix!
+    if (myosd_get(MYOSD_VERSION) >= 243 && !TARGET_OS_MACCATALYST && IsRunningOnMac())
+        ARG2("-numprocessors", "1");
+    
+#ifdef DEBUG
+    ARG("-verbose");
+#endif
+    
+    NSCParameterAssert(argc < sizeof(argv) / sizeof(argv[0]));
+    
+    // add in any custom command line
+    // TODO: should these be at the end, I think soo
+    // TODO: this code does not support quotes!!!
+    for (char* tok = strtok(options, " "); tok != NULL; tok = strtok(NULL, " ")) {
+        if (argc >= sizeof(argv) / sizeof(argv[0]))
+            break;
+        ARG(tok);
+    }
     
     myosd_callbacks callbacks = {
         .video_init = m4i_video_init,
@@ -477,7 +513,12 @@ int run_mame(char* system, char* game)
         .game_exit = m4i_game_stop,
     };
 
+    TIMER_ZERO(mame_boot);
+    TIMER_START(mame_boot);
     return myosd_main(argc,argv,&callbacks,sizeof(callbacks));
+    
+    #undef ARG
+    #undef ARG2
 }
 
 static void init_pause()
@@ -500,6 +541,34 @@ static void check_pause()
     while (g_emulation_paused == PAUSE_THREAD)
         [g_emulation_paused_cond wait];
     [g_emulation_paused_cond unlock];
+}
+
+// setup the globals the MAME thread uses to run the next game, or pass nil to run without params (aka main menu)
+void set_mame_globals(GameInfo* game)
+{
+    if (game != nil)
+    {
+        // please only call this on main-thread
+        NSCParameterAssert(NSThread.isMainThread);
+
+        NSString* name = game.gameName;
+        if (game.gameFile.length != 0)
+            name = game.gameFile;
+        if ([name isEqualToString:kGameInfoNameMameMenu])
+            name = @" ";
+        strncpy(g_mame_game, name.UTF8String, sizeof(g_mame_game));
+        strncpy(g_mame_system, game.gameSystem.UTF8String, sizeof(g_mame_system));
+        strncpy(g_mame_type, game.gameMediaType.UTF8String, sizeof(g_mame_type));
+        strncpy(g_mame_options, game.gameCustomCmdline.UTF8String, sizeof(g_mame_options));
+        g_mame_game_error[0] = 0;
+    }
+    else
+    {
+        g_mame_game[0] = 0;
+        g_mame_system[0] = 0;
+        g_mame_type[0] = 0;
+        g_mame_options[0] = 0;
+    }
 }
 
 void* app_Thread_Start(void* args)
@@ -525,9 +594,16 @@ void* app_Thread_Start(void* args)
         // copy the system+game we should run, and set globals so we run the menu next time.
         char mame_system[sizeof(g_mame_system)];    // system MAME should run
         char mame_game[sizeof(g_mame_game)];        // game MAME should run (or empty is menu)
+        char mame_type[sizeof(g_mame_type)];        // type of game (cart, flop, etc)
+        char mame_options[sizeof(g_mame_options)];  // custom options
         strncpy(mame_system, g_mame_system, sizeof(mame_system));
         strncpy(mame_game, g_mame_game, sizeof(mame_game));
-        g_mame_game[0] = g_mame_system[0] = 0;
+        strncpy(mame_options, g_mame_options, sizeof(mame_options));
+        strncpy(mame_type+1, g_mame_type, sizeof(mame_type)-1);
+        mame_type[0] = g_mame_type[0] ? '-' : 0;        // we want to pass -cart, -flop, etc
+        
+        // clear globals so we run the MENU next time, or incase MAME crashes or fails.
+        set_mame_globals(nil);
         
         BOOL running_game = mame_game[0] != 0;
         
@@ -535,12 +611,13 @@ void* app_Thread_Start(void* args)
         if (running_game)
             g_mame_output_text[0] = 0;
         
-        if (run_mame(mame_system, mame_game) != 0 && running_game) {
+        if (run_mame(mame_system, mame_type, mame_game, mame_options) != 0 && running_game) {
             if (mame_system[0] == 0)
                 strncpy(g_mame_game_error, mame_game, sizeof(g_mame_game_error));
             else
-                snprintf(g_mame_game_error, sizeof(g_mame_game_error), "%s/%s", mame_system, mame_game);
-            g_mame_game[0] = g_mame_system[0] = 0;
+                snprintf(g_mame_game_error, sizeof(g_mame_game_error), "%s %s %s", mame_system, mame_type, mame_game);
+
+            set_mame_globals(nil);
         }
     }
     NSLog(@"thread exit");
@@ -615,6 +692,12 @@ NSString* find_category(NSString* name, NSString* parent)
 // called from deep inside MAME select_game menu, to give us the valid list of games/drivers
 void m4i_game_list(myosd_game_info* game_info, int game_count)
 {
+    // TODO: the code in LIBMAME to enumerate romless machines is slow, it only happens first boot, but....
+    // ...maybe we can cache results, either here or down in the core, or speed up, or something??
+    // ...could have a static list of romless machines, but that we would need to update version to version...
+    TIMER_STOP(mame_boot);
+    NSLog(@"GAME LIST: %d games, %.3fsec", game_count, TIMER_TIME(mame_boot));
+
     static NSString* screens[8] = {
         kGameInfoScreenHorizontal,
         kGameInfoScreenVertical,
@@ -640,7 +723,7 @@ void m4i_game_list(myosd_game_info* game_info, int game_count)
                 continue;
             if (game_info[i].type < 0 || game_info[i].type >= sizeof(types)/sizeof(types[0]))
                 continue;
-            if (g_pref_filter_bios && (game_info[i].flags & MYOSD_GAME_INFO_BIOS))
+            if (g_pref_filter_bios && (game_info[i].flags & MYOSD_GAME_INFO_BIOS) && myosd_get(MYOSD_VERSION) == 139)
                 continue;
             if (g_pref_filter_not_working && (game_info[i].flags & MYOSD_GAME_INFO_NOT_WORKING))
                 continue;
@@ -648,41 +731,62 @@ void m4i_game_list(myosd_game_info* game_info, int game_count)
                 continue;
             
             NSString* software_list = @(game_info[i].software_list ?: "");
+            
+            // BIOS is only a thing on MAME 139, they are type Console now.
+            NSString* type = types[game_info[i].type];
+            if ((game_info[i].flags & MYOSD_GAME_INFO_BIOS) && myosd_get(MYOSD_VERSION) == 139)
+                type = kGameInfoTypeBIOS;
+            
+            NSString* parent = @(game_info[i].parent ?: "");
+            if ([parent isEqualToString:@"0"])
+                parent = @"";
 
-            [games addObject:@{
-                kGameInfoType:        (game_info[i].flags & MYOSD_GAME_INFO_BIOS) ? kGameInfoTypeBIOS : types[game_info[i].type],
+            NSString* year = @(game_info[i].year ?: "");
+            if ([year isEqualToString:@"0"])
+                year = @"";
+
+            GameInfo* game = [[GameInfo alloc] initWithDictionary:@{
+                kGameInfoType:        type,
                 kGameInfoName:        @(game_info[i].name),
                 kGameInfoDescription: @(game_info[i].description),
-                kGameInfoYear:        @(game_info[i].year),
-                kGameInfoParent:      @(game_info[i].parent ?: ""),
+                kGameInfoYear:        year,
+                kGameInfoParent:      parent,
                 kGameInfoManufacturer:@(game_info[i].manufacturer),
-                kGameInfoCategory:    find_category(@(game_info[i].name), @(game_info[i].parent ?: "")),
+                kGameInfoCategory:    find_category(@(game_info[i].name), parent),
                 kGameInfoDriver:      [@(game_info[i].source_file ?: "").lastPathComponent stringByDeletingPathExtension],
-                kGameInfoSoftware:    software_list,
+                kGameInfoSoftwareMedia:software_list,
                 kGameInfoScreen:      screens[(game_info[i].flags & MYOSD_GAME_INFO_VERTICAL) ? 1 : 0 +
                                               (game_info[i].flags & MYOSD_GAME_INFO_VECTOR)   ? 2 : 0 +
                                               (game_info[i].flags & MYOSD_GAME_INFO_LCD)      ? 4 : 0 ]
             }];
             
-            if (software_list.length != 0) {
-                NSArray* software = [g_softlist getGamesForSystem:games.lastObject];
+#ifdef DEBUG
+            XGameInfo* xgame = [[XGameInfo alloc] initWithDictionary:game.gameDictionary];
+#endif
+            NSArray* software = @[];
+            if (software_list.length != 0)
+            {
+                software = [g_softlist getGamesForSystem:game] ?: @[];
+            
                 if (g_pref_filter_clones)
-                    software = [software filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"%K == ''", kGameInfoParent]];
-                [games addObjectsFromArray:software];
+                    software = [software filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"gameParent == ''"]];
             }
+            
+            [games addObject:game];
+            [games addObjectsFromArray:software];
         }
         
         NSString* mame_version = [@((const char *)myosd_get(MYOSD_VERSION_STRING) ?: "") componentsSeparatedByString:@" ("].firstObject;
 
         // add a *special* system game that will run the DOS MAME menu.
-        [games addObject:@{
+        [games addObject:[[GameInfo alloc] initWithDictionary:@{
             kGameInfoType:kGameInfoTypeComputer,
             kGameInfoName:kGameInfoNameMameMenu,
             kGameInfoParent:@"",
             kGameInfoDescription:[NSString stringWithFormat:@"MAME %@", mame_version],
             kGameInfoYear:@"1996",
             kGameInfoManufacturer:@"MAMEDev and contributors",
-        }];
+        }]];
 
         // give the list to the main thread to display to user
         [sharedInstance performSelectorOnMainThread:@selector(chooseGame:) withObject:games waitUntilDone:FALSE];
@@ -691,9 +795,10 @@ void m4i_game_list(myosd_game_info* game_info, int game_count)
 
 void m4i_game_start(myosd_game_info* info)
 {
-    NSLog(@"GAME START: %s \"%s\"%s%s", info->name, info->description,
+    TIMER_STOP(mame_boot);
+    NSLog(@"GAME START: %s \"%s\"%s%s %.3fsec", info->name, info->description,
           (info->flags & MYOSD_GAME_INFO_VERTICAL) ? " VERTICAL" : "",
-          (info->flags & MYOSD_GAME_INFO_VECTOR) ? " VECTOR" : "");
+          (info->flags & MYOSD_GAME_INFO_VECTOR) ? " VECTOR" : "", TIMER_TIME(mame_boot));
     
     myosd_inGame = 1;
     myosd_isVertical = (info->flags & MYOSD_GAME_INFO_VERTICAL) != 0;
@@ -712,17 +817,16 @@ void m4i_game_stop()
 
 @interface EmulatorController()
 #if TARGET_OS_IOS
-<EmulatorKeyboardKeyPressedDelegate, EmulatorKeyboardModifierPressedDelegate>
+<EmulatorKeyboardKeyPressedDelegate, EmulatorKeyboardModifierPressedDelegate, EmulatorTouchMouseHandlerDelegate>
 #endif
 {
     CSToastStyle *toastStyle;
-    CGPoint mouseTouchStartLocation;
-    CGPoint mouseInitialLocation;
+    CGPoint touchDirectionalInitialLocation;
     CGPoint touchDirectionalMoveStartLocation;
     CGPoint touchDirectionalMoveInitialLocation;
     CGSize  layoutSize;
     SkinManager* skinManager;
-    AVPlayer_View* avPlayer;
+    TVAlertController * hudViewController;
 }
 
 @property(readwrite, nonatomic) BOOL showSoftwareKeyboard;
@@ -775,16 +879,13 @@ void m4i_game_stop()
 
 #endif
 
-+ (NSArray*)romList {
-    return [g_category_dict allKeys];
-}
-
-+ (void)setCurrentGame:(NSDictionary*)game {
-    [[NSUserDefaults standardUserDefaults] setObject:(game ?: @{}) forKey:kSelectedGameInfoKey];
++ (void)setCurrentGame:(GameInfo*)game {
+    [[NSUserDefaults standardUserDefaults] setObject:(game.gameDictionary ?: @{}) forKey:kSelectedGameInfoKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
-+ (NSDictionary*)getCurrentGame {
-    return [[NSUserDefaults standardUserDefaults] objectForKey:kSelectedGameInfoKey] ?: @{};
++ (GameInfo*)getCurrentGame {
+    NSDictionary* info = [[NSUserDefaults standardUserDefaults] objectForKey:kSelectedGameInfoKey] ?: @{};
+    return [[GameInfo alloc] initWithDictionary:info];
 }
 
 + (EmulatorController*)sharedInstance {
@@ -800,20 +901,16 @@ void m4i_game_stop()
 
     sharedInstance = self;
     
-    g_softlist = [[SoftwareList alloc] initWithPath:@(get_documents_path(""))];
+    g_softlist = SoftwareList.sharedInstance;
 
     TIMER_START(load_cat);
     g_category_dict = load_category_ini();
     TIMER_STOP(load_cat);
     NSLog(@"load_category_ini took %0.3fsec", TIMER_TIME(load_cat));
 
+    g_mame_first_boot = TRUE;
     g_mame_game_info = [EmulatorController getCurrentGame];
-    NSString* name = g_mame_game_info[kGameInfoName] ?: @"";
-    if ([name isEqualToString:kGameInfoNameMameMenu])
-        name = @" ";
-    strncpy(g_mame_system, g_mame_game_info.gameSystem.UTF8String, sizeof(g_mame_system));
-    strncpy(g_mame_game, name.UTF8String, sizeof(g_mame_game));
-    g_mame_game_error[0] = 0;
+    set_mame_globals(g_mame_game_info);
     
     // delete the UserDefaults, this way if we crash we wont try this game next boot
     [EmulatorController setCurrentGame:nil];
@@ -868,6 +965,10 @@ void mame_save_state(int slot)
 
 - (void)presentPopup:(UIViewController *)viewController from:(UIView*)view animated:(BOOL)flag completion:(void (^)(void))completion {
 #if TARGET_OS_IOS // UIPopoverPresentationController does not exist on tvOS.
+
+    if (view != nil)
+        viewController.modalPresentationStyle = UIModalPresentationPopover;
+    
     UIPopoverPresentationController *ppc = viewController.popoverPresentationController;
     if ( ppc != nil ) {
         if (view == nil || view.hidden || CGRectIsEmpty(view.bounds)) {
@@ -933,28 +1034,52 @@ void mame_save_state(int slot)
     }
 }
 
-HUDViewController* g_menu;
+UIViewController* g_menu;
 
 -(void)runMenu:(id)sender {
 
     GCController* controller = [sender isKindOfClass:[GCController class]] ? sender : nil;
     UIView* view = [sender isKindOfClass:[UIView class]] ? sender : nil;
     
-    NSLog(@"runMenu: %@", controller);
+    NSLog(@"runMenu: %@", sender);
     TIMER_DUMP();
     TIMER_RESET();
     
-    // if menu is up take it down
-    if (self.presentedViewController != nil) {
-        if (self.presentedViewController.isBeingDismissed || self.presentedViewController != g_menu)
+    // on tvOS if the HUD is shown, we dont show a menu, we give focus to the HUD
+#if TARGET_OS_TV
+    if (g_pref_showHUD && g_menu == nil && self.presentedViewController == nil) {
+        self.controllerUserInteractionEnabled = YES;
+        self.restoresFocusAfterTransition = NO;
+        g_menu = self;
+        [self setNeedsFocusUpdate];
+        return;
+    }
+    
+    if (g_menu == self) {
+        self.controllerUserInteractionEnabled = NO;
+        g_menu = nil;
+        [self setNeedsFocusUpdate];
+        if (g_pref_showHUD)
             return;
-        
-        if ([self.presentedViewController isKindOfClass:[UIAlertController class]])
-            [(UIAlertController*)self.presentedViewController dismissWithCancel];
+    }
+#endif
+    
+    // if menu is up take it down
+    if (g_menu != nil) {
 
-        if ([self.presentedViewController isKindOfClass:[HUDViewController class]])
-            [self dismissViewControllerAnimated:TRUE completion:nil];
-        
+        NSLog(@"runMenu: DISMISS MENU");
+
+        if (self.presentedViewController.isBeingDismissed)
+            return;
+
+        // our onDismiss handler will be called
+        [self dismissViewControllerAnimated:TRUE completion:nil];
+        return;
+    }
+
+    // if we have something else up, like settings, or error alert, etc just bail
+    if (self.presentedViewController != nil) {
+        NSLog(@"runMenu: presentedViewController != nil => BAIL");
         return;
     }
 
@@ -965,35 +1090,21 @@ HUDViewController* g_menu;
     if (controller_count > 1 && ((GCController*)g_controllers.lastObject).extendedGamepad == nil)
         controller_count--;
 
-    HUDViewController* menu = [[HUDViewController alloc] init];
-
-    if (TARGET_OS_IOS && !IsRunningOnMac()) {
-        menu.font = nil;
-        menu.blurBackground = YES;
-    }
-    else {
-        menu.font = [UIFont systemFontOfSize:42.0 weight:UIFontWeightRegular];
-        menu.blurBackground = NO;
-        menu.dimBackground = 0.8;
-    }
+    TVAlertController* menu = [[TVAlertController alloc] initWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     
-#if TARGET_OS_IOS
-    if (view != nil)
-        menu.modalPresentationStyle = UIModalPresentationPopover;
+    if (TARGET_OS_IOS && !IsRunningOnMac())
+        menu.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     else
-        menu.modalPresentationStyle = UIModalPresentationOverFullScreen;
-#else
-    menu.modalPresentationStyle = UIModalPresentationOverFullScreen;
-#endif
+        menu.font = [UIFont systemFontOfSize:32.0 weight:UIFontWeightRegular];
 
     if (controller != nil && controller_count > 1 && myosd_num_players > 1)
-        menu.title = [NSString stringWithFormat:@"玩家 %d", player+1];
+        menu.title = [NSString stringWithFormat:@"Player %d", player+1];
     
     if(myosd_inGame && myosd_in_menu==0)
     {
         // if there are zero Start buttons, check for a 2600  // TODO: remove this hack.
-        if (myosd_num_players == 0 && [g_mame_game_info.gameSystem isEqualToString:@"a2600"]) {
-            [menu addButtons:@[@"Select", @"Start"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+        if (myosd_num_players == 0 && [g_mame_game_info.gameSystem hasPrefix:@"a2600"]) {
+            [menu addButtons:@[@"Select", @"Start"] handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_1);
                 else
@@ -1004,13 +1115,13 @@ HUDViewController* g_menu;
         // myosd_num_players counts the number of Start buttons, if there are zero Start buttons, we cant do anything!
         if (myosd_num_players == 1) {
             // 1P Start
-            [menu addButtons:@[@":centsign.circle:Coin+Start"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":centsign.circle:Coin+Start"] handler:^(NSUInteger button) {
                 [self startPlayer:0];
             }];
         }
         else if (myosd_num_players >= 2) {
             // 1P and 2P Start
-            [menu addButtons:@[@":person:1P Start", @":person.2:2P Start"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":person:1P Start", @":person.2:2P Start"] handler:^(NSUInteger button) {
                 [self startPlayer:(int)button];
             }];
         }
@@ -1018,7 +1129,7 @@ HUDViewController* g_menu;
         // 3P and 4P Start
         if (myosd_num_players >= 3) {
             // FYI there is no person.4 symbol, so we just reuse person.3
-            [menu addButtons:@[@":person.3:3P Start", (myosd_num_players >= 4) ? @":person.3:4P Start" : @""] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":person.3:3P Start", (myosd_num_players >= 4) ? @":person.3:4P Start" : @""] handler:^(NSUInteger button) {
                 if (button+2 < myosd_num_players)
                     [self startPlayer:(int)button + 2];
             }];
@@ -1030,7 +1141,7 @@ HUDViewController* g_menu;
                 [menu addButtons:@[
                     [NSString stringWithFormat:@":%@:P%d Select", getGamepadSymbol(gamepad, gamepad.leftTrigger), player + 1],
                     [NSString stringWithFormat:@":%@:P%d Start",  getGamepadSymbol(gamepad, gamepad.rightTrigger), player + 1]
-                ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
+                ] color:UIColor.clearColor handler:^(NSUInteger button) {
                     if (button == 0 )
                         push_mame_button((player < myosd_num_coins ? player : 0), MYOSD_SELECT);  // Player X coin
                     else
@@ -1042,7 +1153,7 @@ HUDViewController* g_menu;
                 [menu addButtons:@[
                     [NSString stringWithFormat:@":%@:P%d Select", getGamepadSymbol(gamepad, gamepad.leftShoulder), player + 1],
                     [NSString stringWithFormat:@":%@:P%d Start",  getGamepadSymbol(gamepad, gamepad.rightShoulder), player + 1]
-                ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
+                ] color:UIColor.clearColor handler:^(NSUInteger button) {
                     if (button == 0 )
                         push_mame_button((player < myosd_num_coins ? player : 0), MYOSD_SELECT);  // Player X coin
                     else
@@ -1055,7 +1166,7 @@ HUDViewController* g_menu;
                 [menu addButtons:@[
                     [NSString stringWithFormat:@":%@:P2 Select", getGamepadSymbol(gamepad, gamepad.leftTrigger)],
                     [NSString stringWithFormat:@":%@:P2 Start",  getGamepadSymbol(gamepad, gamepad.rightTrigger)]
-                ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
+                ] color:UIColor.clearColor handler:^(NSUInteger button) {
                     if (button == 0 )
                         push_mame_button((1 < myosd_num_coins ? 1 : 0), MYOSD_SELECT);  // Player 2 coin
                     else
@@ -1065,9 +1176,9 @@ HUDViewController* g_menu;
 
             // EXIT and MAME MENU
             [menu addButtons:@[
-                [NSString stringWithFormat:@":%@:退出游戏", getGamepadSymbol(gamepad, gamepad.buttonX)],
-                [NSString stringWithFormat:@":%@:速度 2x", getGamepadSymbol(gamepad, gamepad.buttonA)],
-            ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
+                [NSString stringWithFormat:@":%@:Exit Game", getGamepadSymbol(gamepad, gamepad.buttonX)],
+                [NSString stringWithFormat:@":%@:Speed 2x", getGamepadSymbol(gamepad, gamepad.buttonA)],
+            ] color:UIColor.clearColor handler:^(NSUInteger button) {
                 if (button == 0)
                     [self runExit:NO];
                 else
@@ -1076,9 +1187,9 @@ HUDViewController* g_menu;
 
             // CONFIGURE and PAUSE
             [menu addButtons:@[
-                [NSString stringWithFormat:@":%@:配置", getGamepadSymbol(gamepad, gamepad.buttonY)],
-                [NSString stringWithFormat:@":%@:暂停", getGamepadSymbol(gamepad, gamepad.buttonB)],
-            ] style:HUDButtonStylePlain handler:^(NSUInteger button) {
+                [NSString stringWithFormat:@":%@:Configure", getGamepadSymbol(gamepad, gamepad.buttonY)],
+                [NSString stringWithFormat:@":%@:Pause", getGamepadSymbol(gamepad, gamepad.buttonB)],
+            ] color:UIColor.clearColor handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_CONFIGURE);
                 else
@@ -1088,21 +1199,21 @@ HUDViewController* g_menu;
         
         // LOAD and SAVE State
         [menu addButtons:@[
-            [NSString stringWithFormat:@":%@:加载 ①", getGamepadSymbol(gamepad, gamepad.dpad.up) ?: @"bookmark"],
-            [NSString stringWithFormat:@":%@:加载 ②", getGamepadSymbol(gamepad, gamepad.dpad.right) ?: @"bookmark"],
-        ] style:(gamepad ? HUDButtonStylePlain : HUDButtonStyleDefault) handler:^(NSUInteger button) {
+            [NSString stringWithFormat:@":%@:Load ①", getGamepadSymbol(gamepad, gamepad.dpad.up) ?: @"bookmark"],
+            [NSString stringWithFormat:@":%@:Load ②", getGamepadSymbol(gamepad, gamepad.dpad.right) ?: @"bookmark"],
+        ] color:(gamepad ? UIColor.clearColor : nil) handler:^(NSUInteger button) {
             mame_load_state((int)button+1);
         }];
         [menu addButtons:@[
-            [NSString stringWithFormat:@":%@:保存 ①", getGamepadSymbol(gamepad, gamepad.dpad.down) ?: @"bookmark.fill"],
-            [NSString stringWithFormat:@":%@:保存 ②", getGamepadSymbol(gamepad, gamepad.dpad.left) ?: @"bookmark.fill"],
-        ] style:(gamepad ? HUDButtonStylePlain : HUDButtonStyleDefault) handler:^(NSUInteger button) {
+            [NSString stringWithFormat:@":%@:Save ①", getGamepadSymbol(gamepad, gamepad.dpad.down) ?: @"bookmark.fill"],
+            [NSString stringWithFormat:@":%@:Save ②", getGamepadSymbol(gamepad, gamepad.dpad.left) ?: @"bookmark.fill"],
+        ] color:(gamepad ? UIColor.clearColor : nil) handler:^(NSUInteger button) {
             mame_save_state((int)button+1);
         }];
         
         if (gamepad == nil) {
             // CONFIGURE and PAUSE
-            [menu addButtons:@[@":slider.horizontal.3:配置",@":pause.circle:暂停"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":slider.horizontal.3:Configure",@":pause.circle:Pause"] handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_CONFIGURE);
                 else
@@ -1112,8 +1223,8 @@ HUDViewController* g_menu;
         BOOL put_keyboard_on_menu = (TARGET_OS_IOS && !TARGET_OS_MACCATALYST) && (myosd_has_keyboard || g_pref_allow_keyboard) && (g_keyboards.count == 0 || g_pref_force_keyboard) && gamepad == nil;
         if (put_keyboard_on_menu) {
             // KEYBOARD and SERVICE
-            NSString* kb = self.showSoftwareKeyboard ? @":keyboard.chevron.compact.down:键盘" : @":keyboard:键盘";
-            [menu addButtons:@[kb, @":wrench:服务"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            NSString* kb = self.showSoftwareKeyboard ? @":keyboard.chevron.compact.down:Keyboard" : @":keyboard:Keyboard";
+            [menu addButtons:@[kb, @":wrench:Service"] handler:^(NSUInteger button) {
                 if (button == 0)
                     self.showSoftwareKeyboard = !self.showSoftwareKeyboard;
                 else
@@ -1122,7 +1233,7 @@ HUDViewController* g_menu;
         }
         else {
             // SNAPSHOT and SERVICE
-            [menu addButtons:@[@":camera:快照", @":wrench:服务"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+            [menu addButtons:@[@":camera:Snapshot", @":wrench:Service"] handler:^(NSUInteger button) {
                 if (button == 0)
                     push_mame_key(MYOSD_KEY_SNAP);
                 else
@@ -1131,44 +1242,43 @@ HUDViewController* g_menu;
         }
         
         // Power and Reset
-        [menu addButtons:@[@":power:电源", @":escape:重置"] style:HUDButtonStyleDefault handler:^(NSUInteger button) {
+        [menu addButtons:@[@":power:Power", @":escape:Reset"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_RESET);         // this does a HARD reset
             else
                 push_mame_key(MYOSD_KEY_F3);            // this does a SOFT reset
         }];
-
+        
         // show any MAME output, usually a WARNING message, we catch errors in an other place.
         if (g_mame_output_text[0]) {
-            NSString* button = @":info.circle:MAME 输出";
+            NSString* button = @":info.circle:MAME Output";
             NSString* message = [[NSString stringWithUTF8String:g_mame_output_text] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 
-            if ([message rangeOfString:@"警告" options:NSCaseInsensitiveSearch].location != NSNotFound)
-                button = @":exclamationmark.triangle:MAME 警告";
+            if ([message rangeOfString:@"WARNING" options:NSCaseInsensitiveSearch].location != NSNotFound)
+                button = @":exclamationmark.triangle:MAME Warning";
             
-            if ([message rangeOfString:@"错误" options:NSCaseInsensitiveSearch].location != NSNotFound)
-                button = @":xmark.octagon:MAME 错误";
+            if ([message rangeOfString:@"ERROR" options:NSCaseInsensitiveSearch].location != NSNotFound)
+                button = @":xmark.octagon:MAME Error";
             
-            [menu addButton:button style:HUDButtonStyleDefault handler:^{
+            [menu addButton:button handler:^{
                 [self startMenu];
-                [self showAlertWithTitle:@PRODUCT_NAME message:message buttons:@[@"继续"] handler:^(NSUInteger button) {
+                [self showAlertWithTitle:@PRODUCT_NAME message:message buttons:@[@"Continue"] handler:^(NSUInteger button) {
                     [self endMenu];
                 }];
             }];
         }
     }
     
-    [menu addButton:@":gear:设置" style:HUDButtonStyleDefault handler:^{
+    [menu addButton:@":gear:Settings" handler:^{
         [self runSettings];
     }];
-    [menu addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:退出游戏" : @":xmark.circle:退出" style:HUDButtonStyleDestructive handler:^{
+    [menu addButton:(myosd_inGame && myosd_in_menu==0) ? @"Exit Game" : @"Exit" style:UIAlertActionStyleDestructive handler:^{
         [self runExit:NO];
     }];
-    
-    if (view == nil && TARGET_OS_IOS) {
-        [menu addButton:@"取消" style:HUDButtonStyleCancel handler:^{}];
-    }
-    
+
+    // Cancel button wont show (cuz we are an action sheet) but we need it for auto dismiss
+    [menu addButton:@"Cancel" style:UIAlertActionStyleCancel handler:^{}];
+
     [menu onDismiss:^{
         NSParameterAssert(g_menu != nil);
         g_menu = nil;
@@ -1191,14 +1301,14 @@ HUDViewController* g_menu;
 {
     if ((!myosd_inGame || myosd_in_menu == 0) && ask_user && self.presentedViewController == nil)
     {
-        NSString* yes = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓐ 是" : @"是";
-        NSString* no  = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Ⓑ 否" : @"否";
+        NSString* yes = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"Yes Ⓐ" : @"Yes";
+        NSString* no  = (g_controllers.count > 0 && TARGET_OS_IOS) ? @"No Ⓑ" : @"No";
         UIAlertControllerStyle style = UIAlertControllerStyleAlert;
         
         if (view != nil && self.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular && self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular)
             style = UIAlertControllerStyleActionSheet;
 
-        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"确实要退出吗?" message:@"直接退出将丢失进度，如果想保存进度，请先存档再退出。\n现在要直接退出吗？" preferredStyle:style];
+        UIAlertController *exitAlertController = [UIAlertController alertControllerWithTitle:@"Are you sure you want to exit?" message:nil preferredStyle:style];
 
         [self startMenu];
         [exitAlertController addAction:[UIAlertAction actionWithTitle:yes style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
@@ -1215,7 +1325,7 @@ HUDViewController* g_menu;
     else if (myosd_inGame && myosd_in_menu == 0)
     {
         if (!g_mame_game_info.gameIsMame) {
-            g_mame_game[0] = g_mame_system[0] = 0;
+            set_mame_globals(nil);
             g_mame_game_info = nil;
         }
         myosd_exitGame = 1;
@@ -1226,7 +1336,7 @@ HUDViewController* g_menu;
     }
     else
     {
-        g_mame_game[0] = g_mame_system[0] = 0;
+        set_mame_globals(nil);
         g_mame_game_info = nil;
         myosd_exitGame = 1;
     }
@@ -1275,7 +1385,8 @@ HUDViewController* g_menu;
 }
 
 - (void)checkForNewRomsInit {
-    g_settings_roms_count = [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects.count;
+    g_settings_roms_count = [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects.count +
+                            [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"software")].allObjects.count;
     g_settings_file_count = [NSFileManager.defaultManager contentsOfDirectoryAtPath:getDocumentPath(@"") error:nil].count;
     g_settings_options = [[Options alloc] init];
 }
@@ -1283,7 +1394,8 @@ HUDViewController* g_menu;
 - (void)checkForNewRoms {
     if (g_settings_options == nil)
         return;
-    NSInteger roms_count = [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects.count;
+    NSInteger roms_count = [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects.count +
+                           [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"software")].allObjects.count;
     NSInteger file_count = [NSFileManager.defaultManager contentsOfDirectoryAtPath:getDocumentPath(@"") error:nil].count;
     Options* options = [[Options alloc] init];
 
@@ -1340,20 +1452,63 @@ HUDViewController* g_menu;
     [self updatePointerLocked];
 }
 
+- (void)runAddROMS:(id)from {
+    NSString* title = g_no_roms_found ? @"Welcome to " PRODUCT_NAME_LONG : @"Add ROMs";
+#if TARGET_OS_TV
+    NSString* message = @"To transfer ROMs from your computer, Start Web Server or Import ROMs.";
+#else
+    NSString* message = @"To transfer ROMs from your computer, Start Web Server, Import ROMs, or use AirDrop.";
+#endif
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+#if TARGET_OS_IOS
+    [alert addAction:[UIAlertAction actionWithTitle:@"Import ROMs" symbol:@"square.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+        [self runImport];
+    }]];
+#endif
+    if (CloudSync.status == CloudSyncStatusAvailable)
+    {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Import from iCloud" symbol:@"icloud.and.arrow.down" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+            [CloudSync import];
+        }]];
+    }
+#if TARGET_OS_IOS
+    [alert addAction:[UIAlertAction actionWithTitle:@"Show Files" symbol:@"folder" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+        [self runShowFiles];
+    }]];
+#endif
+    [alert addAction:[UIAlertAction actionWithTitle:@"Start Web Server" symbol:@"arrow.up.arrow.down.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+        [self runServer];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reload ROMs" symbol:@"arrow.2.circlepath.circle" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self reload];  /* exit mame menu and re-scan ROMs*/
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        g_no_roms_found_canceled = TRUE; // dont ask again
+        if (self.presentedViewController == nil)
+            [self reload];  /* exit mame menu and re-scan ROMs*/
+    }]];
+#if TARGET_OS_IOS
+    if ([from isKindOfClass:[UIView class]]) {
+        UIView* view = from;
+        alert.modalPresentationStyle = UIModalPresentationPopover;
+        alert.popoverPresentationController.sourceView = view;
+        alert.popoverPresentationController.sourceRect = view.bounds;
+    }
+#endif
+    [self.topViewController presentViewController:alert animated:YES completion:nil];
+}
+
 -(void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     NSLog(@"PRESENT VIEWCONTROLLER: %@", viewControllerToPresent);
-    
-    if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-        if (@available(iOS 13.0, tvOS 13.0, *))
-            viewControllerToPresent.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-    }
-
     self.controllerUserInteractionEnabled = YES;
     [super presentViewController:viewControllerToPresent animated:flag completion:completion];
 }
 -(void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion {
     NSLog(@"DISMISS VIEWCONTROLLER: %@", [self presentedViewController]);
-    self.controllerUserInteractionEnabled = NO;
+    // if the HUD has focus, keep controllerUserInteractionEnabled YES
+    if (g_menu != self)
+        self.controllerUserInteractionEnabled = NO;
     [super dismissViewControllerAnimated:flag completion:completion];
 }
 
@@ -1532,10 +1687,10 @@ HUDViewController* g_menu;
     }];
 }
 
-#define UIPressTypeNone ((UIPressType)-1)
+#if TARGET_OS_IOS   // NOT needed on tvOS it handles it with the focus engine
 
 // de-bounce input from analog buttons (MFi controler) only track a CHANGE
-UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
+ButtonPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     
     static unsigned long g_input_status;
 
@@ -1553,25 +1708,32 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     g_input_status = pad_status;
     
     if (changed_status & MYOSD_A)
-        return UIPressTypeSelect;
+        return ButtonPressTypeSelect;
     if (changed_status & MYOSD_B)
-        return UIPressTypeMenu;
+        return ButtonPressTypeBack;
     if (changed_status & MYOSD_UP)
-        return UIPressTypeUpArrow;
+        return ButtonPressTypeUp;
     if (changed_status & MYOSD_DOWN)
-        return UIPressTypeDownArrow;
+        return ButtonPressTypeDown;
     if (changed_status & MYOSD_LEFT)
-        return UIPressTypeLeftArrow;
+        return ButtonPressTypeLeft;
     if (changed_status & MYOSD_RIGHT)
-        return UIPressTypeRightArrow;
+        return ButtonPressTypeRight;
+    if (changed_status & MYOSD_MENU)
+        return ButtonPressTypeMenu;
+    if (changed_status & MYOSD_HOME)
+        return ButtonPressTypeHome;
+    if (changed_status & MYOSD_OPTION)
+        return ButtonPressTypeOptions;
 
-    return UIPressTypeNone;
+    return ButtonPressTypeNone;
 }
 
-#if TARGET_OS_IOS   // NOT needed on tvOS it handles it with the focus engine
-- (void)handle_MENU:(unsigned long)pad_status stick:(CGPoint)stick
+-(void)handleButtonPress:(ButtonPressType)type
 {
-    UIResponder* target = [self presentedViewController];
+    UIViewController* target = [self presentedViewController];
+    while (target.presentedViewController != nil)
+        target = target.presentedViewController;
     
     // if a viewController or menu is up send the input to it.
     if (target != nil) {
@@ -1579,14 +1741,29 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
         if ([target isKindOfClass:[UINavigationController class]])
             target = [(UINavigationController*)target topViewController];
 
-        // de-bounce input from analog buttons (MFi controler)
-        UIPressType button = input_debounce(pad_status, stick);
+        if (type != ButtonPressTypeNone)
+        {
+            // NOTE some code uses the old UIPressType, so make sure enum matches
+            _Static_assert(UIPressTypeUpArrow == ButtonPressTypeUp, "");
+            _Static_assert(UIPressTypeDownArrow == ButtonPressTypeDown, "");
+            _Static_assert(UIPressTypeLeftArrow == ButtonPressTypeLeft, "");
+            _Static_assert(UIPressTypeRightArrow == ButtonPressTypeRight, "");
+            _Static_assert(UIPressTypeSelect == ButtonPressTypeSelect, "");
+            _Static_assert(UIPressTypeMenu == ButtonPressTypeBack, "");
 
-        if (button != UIPressTypeNone && [target respondsToSelector:@selector(handleButtonPress:)])
-            [(id)target handleButtonPress:button];
+             if ([target respondsToSelector:@selector(handleButtonPress:)] && !target.isBeingDismissed)
+                [(id)target handleButtonPress:(UIPressType)type];
 
-        return;
+            if ([target.navigationController respondsToSelector:@selector(handleButtonPress:)] && !target.navigationController.isBeingDismissed)
+                [(id)target.navigationController handleButtonPress:(UIPressType)type];
+        }
     }
+}
+- (void)handle_MENU:(unsigned long)pad_status stick:(CGPoint)stick
+{
+    // if a viewController or menu is up send the input to it.
+    if (self.presentedViewController)
+        return [self handleButtonPress:input_debounce(pad_status, stick)];
 
     // touch screen START button, when no COIN button
     if (CGRectIsEmpty(rInput[BTN_SELECT]) && (buttonState & MYOSD_START) && !(pad_status & MYOSD_START))
@@ -1681,16 +1858,14 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     hideShowControlsForLightgun.alpha = ((float)g_controller_opacity / 100.0f) * 0.5;
     hideShowControlsForLightgun.translatesAutoresizingMaskIntoConstraints = NO;
     CGFloat size = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad ? 32.0f : 24.0f;
-    [hideShowControlsForLightgun addConstraint:[NSLayoutConstraint constraintWithItem:hideShowControlsForLightgun attribute:NSLayoutAttributeWidth relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1.0 constant:size]];
+    [hideShowControlsForLightgun addConstraint:[NSLayoutConstraint constraintWithItem:hideShowControlsForLightgun attribute:NSLayoutAttributeWidth relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1.0 constant:size * 3]];
     [hideShowControlsForLightgun addConstraint:[NSLayoutConstraint constraintWithItem:hideShowControlsForLightgun attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1.0 constant:size]];
     [self.view addSubview:hideShowControlsForLightgun];
     [self.view addConstraint:[NSLayoutConstraint constraintWithItem:hideShowControlsForLightgun attribute:NSLayoutAttributeCenterX relatedBy:NSLayoutRelationEqual toItem:self.view attribute:NSLayoutAttributeCenterX multiplier:1.0f constant:0.0f]];
     [self.view addConstraint:[NSLayoutConstraint constraintWithItem:hideShowControlsForLightgun attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.view attribute:NSLayoutAttributeTopMargin multiplier:1.0f constant:size / 2.0]];
     areControlsHidden = NO;
-#else
-    UIPanGestureRecognizer* pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(remotePan:)];
-    pan.allowedTouchTypes = @[@(UITouchTypeIndirect)];
-    [self.view addGestureRecognizer:pan];
+    
+    [self setupTouchMouseSupport];
 #endif
     
     [self changeUI];
@@ -1740,14 +1915,11 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     [self performSelectorOnMainThread:@selector(setupGameControllers) withObject:nil waitUntilDone:NO];
     
     toastStyle = [CSToastManager sharedStyle];
-    toastStyle.backgroundColor = [UIColor colorWithWhite:0.111 alpha:0.70];
+    toastStyle.backgroundColor = [UIColor colorWithWhite:0.111 alpha:0.80];
     toastStyle.messageColor = [UIColor whiteColor];
-    toastStyle.messageFont = [UIFont systemFontOfSize:13];
-    toastStyle.titleFont = [UIFont systemFontOfSize:13];
     toastStyle.imageSize = CGSizeMake(toastStyle.messageFont.lineHeight, toastStyle.messageFont.lineHeight);
     
-    mouseInitialLocation = CGPointMake(9111, 9111);
-    mouseTouchStartLocation = mouseInitialLocation;
+    touchDirectionalInitialLocation = CGPointMake(9111, 9111);
 }
 
 -(void)viewWillAppear:(BOOL)animated {
@@ -1758,19 +1930,22 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
 {
     [super viewDidAppear:animated];
 
-    if (g_mame_game_info.gameName.length != 0 && !g_mame_game_info.gameIsFake)
+    if (g_mame_game_info.gameName.length != 0)
         [self updateUserActivity:g_mame_game_info];
 
     [self scanForDevices];
     if (![MetalScreenView isSupported]) {
-        [self showAlertWithTitle:@PRODUCT_NAME message:@"此设备不支持 Metal 技术。" buttons:@[] handler:nil];
+        [self showAlertWithTitle:@PRODUCT_NAME message:@"Metal not supported on this device." buttons:@[] handler:nil];
     }
 }
 
 #if TARGET_OS_IOS
 - (UIRectEdge)preferredScreenEdgesDeferringSystemGestures
 {
-    return UIRectEdgeBottom;
+    if (g_device_is_fullscreen)
+        return UIRectEdgeAll;
+    else
+        return UIRectEdgeNone;
 }
 - (BOOL)prefersStatusBarHidden
 {
@@ -1863,31 +2038,12 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     screenView.alpha = alpha;
     imageOverlay.alpha = alpha;
     imageLogo.alpha = (1.0 - alpha);
-    hudView.alpha *= alpha;
-}
-
-// if we are on a device that does wideColor then "play" a HDR video to enable HDR output.
-// idea from https://kidi.ng/wanna-see-a-whiter-white/
--(void)enableHDR {
-
-    // no HDR on macOS, at least not yet
-    if (IsRunningOnMac() || self.view.window.screen.traitCollection.displayGamut != UIDisplayGamutP3)
-        return;
-
-    if (avPlayer == nil) {
-        NSURL* url = [NSBundle.mainBundle URLForResource:@"whiteHDR" withExtension:@"mp4"];
-        NSAssert(url != nil, @"missing whiteHDR resource");
-        avPlayer = [[AVPlayer_View alloc] initWithURL:url];
-        [self.view addSubview:avPlayer];
-    }
-    avPlayer.frame = CGRectMake(0, 0, 1, 1);
-    avPlayer.center = CGPointMake(self.view.safeAreaInsets.left, self.view.safeAreaInsets.top);
-    [self.view sendSubviewToBack:avPlayer];
+    hudViewController.view.alpha *= alpha;
 }
 
 -(void)buildLogoView {
-    // no need to show logo in fullscreen.
-    if ((g_device_is_fullscreen || TARGET_OS_TV) && !g_mame_benchmark)
+    // no need to show logo in fullscreen. (unless benchmark or first boot)
+    if ((g_device_is_fullscreen || TARGET_OS_TV) && !g_mame_benchmark && !(g_mame_first_boot && g_mame_game_info.gameName.length == 0))
         return;
 
     // put a AirPlay logo on the iPhone screen when playing on external display
@@ -1934,17 +2090,7 @@ UIPressType input_debounce(unsigned long pad_status, CGPoint stick) {
     fps = [fps stringByAppendingString:str];
 #endif
 
-    [hudView setValue:fps forKey:@"FPS"];
-}
-
--(void)hudChange:(InfoHUD*)hud {
-    if ([screenView isKindOfClass:[MetalScreenView class]]) {
-        [(MetalScreenView*)screenView setShaderVariables:@{
-            hud.changedKey: [hud valueForKey:hud.changedKey]
-        }];
-    }
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(saveShader) object:nil];
-    [self performSelector:@selector(saveShader) withObject:nil afterDelay:2.0];
+    [hudViewController setText:fps forKey:@"FPS"];
 }
 
 // split and trim a string
@@ -2033,6 +2179,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
 }
 
 -(void)saveHUD {
+    UIView* hudView = hudViewController.view;
     if (hudView) {
         BOOL wide = self.view.bounds.size.width > self.view.bounds.size.height;
         [NSUserDefaults.standardUserDefaults setObject:NSStringFromCGRect(hudView.frame) forKey:wide ? kHUDPositionLandKey : kHUDPositionPortKey];
@@ -2042,6 +2189,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
 
 -(void)loadHUD {
     
+    UIView* hudView = hudViewController.view;
     if (hudView) {
         BOOL wide = self.view.bounds.size.width > self.view.bounds.size.height;
 
@@ -2061,7 +2209,6 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     }
 }
 
-
 -(void)buildHUD {
     
     BOOL showFPS = g_pref_showFPS && (g_pref_showHUD != HudSizeInfo);
@@ -2071,32 +2218,39 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
 
     if (g_pref_showHUD == HudSizeZero) {
         [self saveHUD];
-        [hudView removeFromSuperview];
-        hudView = nil;
+        if (hudViewController != nil) {
+            [hudViewController.view removeFromSuperview];
+            [hudViewController willMoveToParentViewController:nil];
+            [hudViewController removeFromParentViewController];
+            [hudViewController didMoveToParentViewController:nil];
+            hudViewController = nil;
+        }
         return;
     }
-    
-    if (hudView == nil) {
-        hudView = [[InfoHUD alloc] init];
+
+    if (hudViewController == nil) {
+        hudViewController = [[TVAlertController alloc] init];
+        hudViewController.modalPresentationStyle = UIModalPresentationNone;
         if (TARGET_OS_IOS && !IsRunningOnMac()) {
-            hudView.font = [UIFont monospacedDigitSystemFontOfSize:hudView.font.pointSize weight:UIFontWeightRegular];
-            hudView.layoutMargins = UIEdgeInsetsMake(8, 8, 8, 8);
+            hudViewController.font = [UIFont monospacedDigitSystemFontOfSize:hudViewController.font.pointSize weight:UIFontWeightRegular];
+            hudViewController.inset = UIEdgeInsetsMake(8, 8, 8, 8);
         }
         else {
-            hudView.font = [UIFont monospacedDigitSystemFontOfSize:24.0 weight:UIFontWeightRegular];
-            hudView.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
+            hudViewController.font = [UIFont monospacedDigitSystemFontOfSize:24.0 weight:UIFontWeightRegular];
+            hudViewController.inset = UIEdgeInsetsMake(16, 16, 16, 16);
         }
-        [hudView addTarget:self action:@selector(hudChange:) forControlEvents:UIControlEventValueChanged];
+        [self addChildViewController:hudViewController];
+        [hudViewController didMoveToParentViewController:self];
         [self loadHUD];
-        [self.view addSubview:hudView];
+        [self.view addSubview:hudViewController.view];
     }
     else {
-        [self.view bringSubviewToFront:hudView];
+        [self.view bringSubviewToFront:hudViewController.view];
     }
     
-    NSInteger selectedIndex = [hudView selectedSegmentIndex];
-    [hudView removeAll];
-    EmulatorController* _self = self;
+    // TODO: save/restore focused item (on tvOS)
+    [hudViewController removeAll];
+    __unsafe_unretained typeof(self) _self = self;
 
     NSString* shader_name = [self getShaderName];
     NSString* shader = [self getShader];
@@ -2106,7 +2260,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
         g_pref_showHUD = HudSizeNormal;
     
     if (g_pref_showHUD < 0) {
-        [hudView addButton:@":command:⌘:" handler:^{
+        [hudViewController addButton:@":command:⌘:" handler:^{
             Options* op = [[Options alloc] init];
             g_pref_showHUD = -g_pref_showHUD; // restore HUD to previous size.
             op.showHUD = g_pref_showHUD;
@@ -2123,7 +2277,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
             g_pref_showHUD <= HudSizeNormal ? @":info.circle:ⓘ:" : (g_pref_showHUD >= HudSizeLarge && can_edit_shader) ? @":slider.horizontal.3:☰:" : @":list.dash:☷:",
             TARGET_OS_IOS ? @":command:⌘:" : @":xmark.circle:ⓧ:"
         ];
-        [hudView addToolbar:items handler:^(NSUInteger button) {
+        [hudViewController addToolbar:items handler:^(NSUInteger button) {
             switch (button) {
                 case 0:
                     push_mame_button(0, MYOSD_SELECT);
@@ -2156,7 +2310,14 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
                 case 5:
                 {
                     Options* op = [[Options alloc] init];
-                    g_pref_showHUD = TARGET_OS_IOS ? -g_pref_showHUD : HudSizeZero;
+#if TARGET_OS_TV
+                    // if the HUD is the menu, then take it down
+                    if (g_menu == _self)
+                        [_self runMenu];
+                    g_pref_showHUD = HudSizeZero;
+#else
+                    g_pref_showHUD = -g_pref_showHUD;
+#endif
                     op.showHUD = g_pref_showHUD;
                     [op saveOptions];
                     [_self changeUI];
@@ -2174,7 +2335,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
             @":p.square.fill:P:",
             @":d.square.fill:D:",
         ];
-        [hudView addToolbar:items handler:^(NSUInteger button) {
+        [hudViewController addToolbar:items handler:^(NSUInteger button) {
             [_self commandKey:"ZAXIPD"[button]];
         }];
 #endif
@@ -2182,57 +2343,59 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     
     if (g_pref_showHUD == HudSizeInfo) {
         // add game info
-        if (g_mame_game_info != nil && g_mame_game_info[kGameInfoName] != nil)
-            [hudView addValue:[ChooseGameController getGameText:g_mame_game_info]];
+        if (g_mame_game_info != nil && g_mame_game_info.gameName.length != 0)
+            [hudViewController addAttributedText:[ChooseGameController getGameText:g_mame_game_info]];
         
         // add FPS display
         if (g_pref_showFPS)
-            [hudView addValue:@"00.00.00 000.00fps" forKey:@"FPS"];
+            [hudViewController addText:@"00.00.00 000.00fps" forKey:@"FPS"];
     }
     
     if (g_pref_showHUD == HudSizeLarge) {
         if (myosd_num_players == 1) {
-            [hudView addButtons:@[@":centsign.circle:Coin+Start"] handler:^(NSUInteger button) {
+            [hudViewController addButtons:@[@":centsign.circle:Coin+Start"] handler:^(NSUInteger button) {
                 [_self startPlayer:0];
             }];
         }
         else if (myosd_num_players >= 2) {
-            [hudView addButtons:@[@":person:1P Start", @":person.2:2P Start"] handler:^(NSUInteger button) {
+            [hudViewController addButtons:@[@":person:1P Start", @":person.2:2P Start"] handler:^(NSUInteger button) {
                 [_self startPlayer:(int)button];
             }];
         }
         if (myosd_num_players >= 3) {
             // FYI there is no person.4 symbol, so we just reuse person.3
-            [hudView addButtons:@[@":person.3:3P Start", (myosd_num_players >= 4) ? @":person.3:4P Start" : @""] handler:^(NSUInteger button) {
+            [hudViewController addButtons:@[@":person.3:3P Start", (myosd_num_players >= 4) ? @":person.3:4P Start" : @""] handler:^(NSUInteger button) {
                 if (button+2 < myosd_num_players)
                     [_self startPlayer:(int)button + 2];
             }];
         }
-        [hudView addButtons:@[@":bookmark:加载 ①", @":bookmark:加载 ②"] handler:^(NSUInteger button) {
+        [hudViewController addButtons:@[@":bookmark:Load ①", @":bookmark:Load ②"] handler:^(NSUInteger button) {
             mame_load_state((int)button + 1);
         }];
-        [hudView addButtons:@[@":bookmark.fill:保存 ①", @":bookmark.fill:保存 ②"] handler:^(NSUInteger button) {
+        [hudViewController addButtons:@[@":bookmark.fill:Save ①", @":bookmark.fill:Save ②"] handler:^(NSUInteger button) {
             mame_save_state((int)button + 1);
         }];
-        [hudView addButtons:@[@":slider.horizontal.3:配置",@":pause.circle:暂停"] handler:^(NSUInteger button) {
+        [hudViewController addButtons:@[@":slider.horizontal.3:Configure",@":pause.circle:Pause"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_CONFIGURE);
             else
                 push_mame_key(MYOSD_KEY_P);
         }];
-        [hudView addButtons:@[@":camera:快照", @":wrench:服务"] handler:^(NSUInteger button) {
+        [hudViewController addButtons:@[@":camera:Snapshot", @":wrench:Service"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_SNAP);
             else
                 push_mame_key(MYOSD_KEY_SERVICE);
         }];
-        [hudView addButtons:@[@":power:电源", @":escape:重置"] handler:^(NSUInteger button) {
+        [hudViewController addButtons:@[@":power:Power", @":escape:Reset"] handler:^(NSUInteger button) {
             if (button == 0)
                 push_mame_key(MYOSD_KEY_RESET);         // this does a HARD reset
             else
                 push_mame_key(MYOSD_KEY_F3);            // this does a SOFT reset
         }];
-        [hudView addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:退出游戏" : @":xmark.circle:退出" color:UIColor.systemRedColor handler:^{
+        [hudViewController addButton:(myosd_inGame && myosd_in_menu==0) ? @":xmark.circle:Exit Game" : @":xmark.circle:Exit" color:[UIColor.systemRedColor colorWithAlphaComponent:0.5] handler:^{
+            if (TARGET_OS_TV && g_menu == _self)
+                [_self runMenu];
             [_self runExit:NO];
         }];
     }
@@ -2242,7 +2405,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
         NSDictionary* shader_variables = ([screenView isKindOfClass:[MetalScreenView class]]) ? [(MetalScreenView*)screenView getShaderVariables] : nil;
         NSArray* shader_arr = split(shader, @",");
         
-        [hudView addTitle:shader_name];
+        [hudViewController addTitle:shader_name];
 
         for (NSString* str in shader_arr) {
             NSArray* arr = split(str, @"=");
@@ -2252,17 +2415,20 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
             // TODO: allow Shader string to contain a "Friendly Name" for the parameter, so the key name can be unique/terse?
             NSString* name = arr[0];
             arr = split(arr[1], @" ");
-            NSNumber* value = shader_variables[name] ?: @([arr[0] floatValue]);
-            NSNumber* min = (arr.count > 1) ? @([arr[1] floatValue]) : @(0);
-            NSNumber* max = (arr.count > 2) ? @([arr[2] floatValue]) : @([arr[0] floatValue]);
-            NSNumber* step= (arr.count > 3) ? @([arr[3] floatValue]) : nil;
+            float value = [(shader_variables[name] ?: arr[0]) floatValue];
+            float min = (arr.count > 1) ? [arr[1] floatValue] : 0.0;
+            float max = (arr.count > 2) ? [arr[2] floatValue] : [arr[0] floatValue];
+            float step= (arr.count > 3) ? [arr[3] floatValue] : 0.0;
 
-            [hudView addValue:value forKey:name format:nil min:min max:max step:step];
+            [hudViewController addValue:value title:name min:min max:max step:step handler:^(float value) {
+                [(MetalScreenView*)_self->screenView setShaderVariables:@{name: @(value)}];
+                [NSObject cancelPreviousPerformRequestsWithTarget:_self selector:@selector(saveShader) object:nil];
+                [_self performSelector:@selector(saveShader) withObject:nil afterDelay:2.0];
+            }];
         }
         
-        __unsafe_unretained typeof(self) _self = self;
-        [hudView addText:@" "];
-        [hudView addButton:@"Restore Defaults" color:UIColor.systemPurpleColor handler:^{
+        [hudViewController addText:@" "];
+        [hudViewController addButton:@"Restore Defaults" color:[UIColor.systemPurpleColor colorWithAlphaComponent:0.5] handler:^{
             NSLog(@"RESTORE DEFAULTS");
             for (NSString* str in shader_arr) {
                 NSArray* arr = split(str, @"=");
@@ -2272,33 +2438,17 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
                 NSNumber* value = @([arr[1] floatValue]);
                 NSLog(@"    %@ = %@", key, value);
                 [(MetalScreenView*)_self->screenView setShaderVariables:@{key: value}];
-                [_self->hudView setValue:value forKey:key];
             }
             [_self saveShader];
+            [_self resetUI];
         }];
     }
     
-    // add a grab handle on the left so you can move the HUD without hitting a button.
-#if TARGET_OS_IOS
-    if (g_pref_showHUD != HudSizeZero) {
-        hudView.layoutMargins = UIEdgeInsetsMake(8, 16, 8, 8);
-        CGFloat height = [hudView sizeThatFits:CGSizeZero].height;
-        CGFloat h = MIN(height * 0.5, 64.0);
-        CGFloat w = hudView.layoutMargins.left / 4;
-        UIView* grab = [hudView viewWithTag:42] ?: [[UIView alloc] init];
-        grab.frame = CGRectMake((hudView.layoutMargins.left - w)/2, (height - h)/2, w, h);
-        grab.tag = 42;
-        grab.backgroundColor = [UIColor.darkGrayColor colorWithAlphaComponent:0.25];
-        grab.layer.cornerRadius = w/2;
-        [hudView addSubview:grab];
-    }
-#endif
-    
     CGRect rect;
     CGRect bounds = self.view.bounds;
-    CGRect frame = hudView.frame;
-    CGFloat scale = hudView.transform.a;
-    CGSize size = [hudView sizeThatFits:CGSizeZero];
+    CGRect frame = hudViewController.view.frame;
+    CGFloat scale = hudViewController.view.transform.a;
+    CGSize size = hudViewController.preferredContentSize;
     CGFloat w = size.width * scale;
     CGFloat h = size.height * scale;
     
@@ -2314,17 +2464,13 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     rect.origin.x = MAX(safe.left + 8, MIN(self.view.bounds.size.width  - safe.right  - w - 8, rect.origin.x));
     rect.origin.y = MAX(safe.top + 8,  MIN(self.view.bounds.size.height - safe.bottom - h - 8, rect.origin.y));
     [self saveHUD];
-    if (selectedIndex != -1) {
-        [hudView handleButtonPress:UIPressTypeDownArrow];
-        [hudView setSelectedSegmentIndex:selectedIndex];
-    }
-
+    
     [UIView animateWithDuration:0.250 animations:^{
-        self->hudView.frame = rect;
+        self->hudViewController.view.frame = rect;
         if (g_pref_showHUD < 0)
-            self->hudView.alpha = ((float)g_controller_opacity / 100.0f);
+            self->hudViewController.view.alpha = ((float)g_controller_opacity / 100.0f);
         else
-            self->hudView.alpha = 1.0;
+            self->hudViewController.view.alpha = 1.0;
     }];
 }
 
@@ -2340,7 +2486,7 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     change_pause(PAUSE_THREAD);
     
     // reset the frame count when you first turn on/off HUD
-    if ((g_pref_showHUD != 0) != (hudView != nil))
+    if ((g_pref_showHUD != 0) != (hudViewController != nil))
         screenView.frameCount = 0;
     
     [imageBack removeFromSuperview];
@@ -2369,7 +2515,6 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     }
 #endif
     [self buildHUD];
-    [self enableHDR];
     [self updateScreenView];
     
     if ( g_joy_used ) {
@@ -2382,10 +2527,11 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     
     [UIApplication sharedApplication].idleTimerDisabled = (myosd_inGame || g_joy_used) ? YES : NO;//so atract mode dont sleep
 
+#if TARGET_OS_IOS
     if ( prev_myosd_light_gun == 0 && myosd_light_gun == 1 && g_pref_lightgun_enabled ) {
         lightgun_x = 0.0;
         lightgun_y = 0.0;
-        [self.view makeToast:@"触控光枪模式启动！" duration:2.0 position:CSToastPositionCenter
+        [self.view makeToast:@"Touch Lightgun Mode Enabled!" duration:2.0 position:CSToastPositionCenter
                        title:nil image:[UIImage systemImageNamed:@"target"] style:toastStyle completion:nil];
     }
     prev_myosd_light_gun = myosd_light_gun;
@@ -2393,14 +2539,16 @@ static NSMutableArray* split(NSString* str, NSString* sep) {
     if (prev_myosd_mouse == 0 && myosd_mouse == 1 && g_pref_touch_analog_enabled ) {
         mouse_delta_x[0] = 0.0;
         mouse_delta_y[0] = 0.0;
-        [self.view makeToast:@"触控鼠标模式启动！" duration:2.0 position:CSToastPositionCenter
+        [self.view makeToast:@"Touch Mouse Mode Enabled!" duration:2.0 position:CSToastPositionCenter
                        title:nil image:[UIImage systemImageNamed:@"cursorarrow.motionlines"] style:toastStyle completion:nil];
     }
+    [self.touchMouseHandler setEnabled:g_pref_touch_analog_enabled];
     prev_myosd_mouse = myosd_mouse;
+#endif
 
     // Show a WARNING toast, but only once, and only if MAME did not show it already
     if (g_pref_showINFO == 0 && g_mame_warning_shown == 0 && g_mame_output_text[0] && strstr(g_mame_output_text, "WARNING") != NULL) {
-        [self.view makeToast:@"⚠️ 此游戏可能工作不正常！" duration:3.0 position:CSToastPositionBottom style:toastStyle];
+        [self.view makeToast:@"⚠️Game might not run correctly." duration:3.0 position:CSToastPositionBottom style:toastStyle];
         g_mame_warning_shown = 1;
     }
     
@@ -2484,7 +2632,7 @@ static int handle_buttons(myosd_input_state* myosd)
         // TODO: fix keyboard for realz
         if (myosd_has_keyboard && myosd_inGame && !myosd_in_menu)
             g_mame_key = MYOSD_KEY_EXIT;    // this does a schedule_exit inside MAME
-        else if (g_no_roms_found && myosd_get(MYOSD_VERSION) > 139)     // HACK!
+        else if (myosd_in_menu && myosd_exitGame == 2 && myosd_get(MYOSD_VERSION) > 139)
             g_mame_key = MYOSD_KEY_EXIT;    // force an exit to dismiss msgbox.
         else
             g_mame_key = MYOSD_KEY_ESC;
@@ -2737,10 +2885,6 @@ static unsigned long read_controller(GCController *controller, float* axis)
     if (gamepad != nil)
         return read_gamepad(gamepad, axis);
     
-    // dont let MAME see the Siri Remote if the HUD is active
-    if (TARGET_OS_TV && g_pref_showHUD && (myosd_inGame && myosd_in_menu==0))
-        return 0;
-
     return read_remote(controller.microGamepad, axis);
 }
 
@@ -2748,7 +2892,7 @@ static unsigned long read_controller(GCController *controller, float* axis)
 static void read_player_controller(GCController *controller, myosd_input_state* myosd, int index, int player)
 {
     // if the controller is in MENU mode, dont let MAME see any input
-    if (g_menuButtonMode[index] != 0)
+    if (g_menuButtonMode[index] != 0 || g_menu != nil)
         return;
     
 #if DIRECT_CONTROLLER_READ
@@ -2880,8 +3024,8 @@ void m4i_input_init(myosd_input_state* myosd, size_t input_size) {
     myosd_num_players   = myosd->num_players;
     myosd_num_coins     = myosd->num_coins;
     myosd_num_inputs    = myosd->num_inputs;
-    myosd_mouse         = myosd->num_mouse;
-    myosd_light_gun     = myosd->num_lightgun;
+    myosd_mouse         = myosd->num_mouse != 0;
+    myosd_light_gun     = myosd->num_lightgun != 0;
     myosd_has_keyboard  = myosd->num_keyboard != 0;
     
     // we have input on a brand new machine, and we need to configure the UI fresh
@@ -3003,9 +3147,11 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
     if (g_joy_used == JOY_USED_GAMEPAD && g_device_is_fullscreen)
         return;
    
-    BOOL touch_dpad_disabled = (myosd_mouse == 1 && g_pref_touch_analog_enabled && g_pref_touch_analog_hide_dpad) ||
-                               (g_pref_touch_directional_enabled && g_pref_touch_analog_hide_dpad) ||
-                               (g_joy_used && g_device_is_fullscreen);
+    BOOL touch_dpad_disabled =
+        (myosd_mouse == 1 && g_pref_touch_analog_enabled && g_pref_touch_analog_hide_dpad) ||
+        (g_pref_touch_directional_enabled && g_pref_touch_analog_hide_dpad) ||
+        (g_joy_used && g_device_is_fullscreen) ||
+        self.showSoftwareKeyboard;
     if ( !(touch_dpad_disabled && g_device_is_fullscreen) || !myosd_inGame ) {
         //analogStickView
         analogStickView = [[AnalogStickView alloc] initWithFrame:rButton[BTN_STICK] withEmuController:self];
@@ -3026,7 +3172,7 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
     if (g_joy_used && g_device_is_fullscreen)
         num_buttons = 0;
    
-    BOOL touch_buttons_disabled = myosd_mouse == 1 && g_pref_touch_analog_enabled && g_pref_touch_analog_hide_buttons;
+    BOOL touch_buttons_disabled = (myosd_mouse == 1 && g_pref_touch_analog_enabled && g_pref_touch_analog_hide_buttons) || self.showSoftwareKeyboard;
     BOOL menu_buttons_disabled = g_pref_showHUD == HudSizeLarge;
     buttonState = 0;
     for (int i=0; i<NUM_BUTTONS; i++)
@@ -3227,6 +3373,7 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
     [self buildBackgroundImage];
     
     [self setNeedsUpdateOfHomeIndicatorAutoHidden];
+    [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
 
     if (externalView != nil)
         r = externalView.window.screen.bounds;
@@ -3243,11 +3390,10 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
         if (g_device_is_fullscreen)
             safeArea.bottom = 0.0;
 
-#if TARGET_OS_MACCATALYST
-        // in macApp, we dont want to correct for the top inset, if we have hidden the titlebar and want to go edge to edge.
-        if (self.view.window.windowScene.titlebar.titleVisibility == UITitlebarTitleVisibilityHidden && self.view.window.windowScene.titlebar.toolbar == nil)
-            safeArea.top = 0.0;
-#endif
+        // if the user has selected to ignore the aspect ratio, use all of the screen
+        if (!g_pref_keep_aspect_ratio && g_device_is_fullscreen)
+            safeArea = UIEdgeInsetsZero;
+            
         r = CGRectIntersection(r, UIEdgeInsetsInsetRect(self.view.bounds, safeArea));
     }
 #elif TARGET_OS_TV
@@ -3738,7 +3884,6 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
-//    NSLog(@"👉👉👉👉👉👉 Touch Began!!! 👉👉👉👉👉👉👉");
     NSSet *handledTouches = [self touchHandler:touches withEvent:event];
     NSSet *allTouches = [event allTouches];
     NSMutableSet *unhandledTouches = [NSMutableSet set];
@@ -3748,16 +3893,13 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
             [unhandledTouches addObject:touch];
         }
     }
-    if ( g_pref_touch_analog_enabled && myosd_mouse == 1 && unhandledTouches.count > 0 ) {
-        [self handleMouseTouchesBegan:unhandledTouches];
-    }
+    [self.touchMouseHandler touchesBeganWithTouches:unhandledTouches];
     if ( g_pref_touch_directional_enabled && unhandledTouches.count > 0 ) {
         [self handleTouchMovementTouchesBegan:unhandledTouches];
     }
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-//    NSLog(@"👋👋👋👋👋👋👋 Touch Moved!!! 👋👋👋👋👋👋👋👋");
     NSSet *handledTouches = [self touchHandler:touches withEvent:event];
     NSSet *allTouches = [event allTouches];
     NSMutableSet *unhandledTouches = [NSMutableSet set];
@@ -3767,16 +3909,13 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
             [unhandledTouches addObject:touch];
         }
     }
-    if ( g_pref_touch_analog_enabled && myosd_mouse == 1 && unhandledTouches.count > 0 ) {
-        [self handleMouseTouchesMoved:unhandledTouches];
-    }
+    [self.touchMouseHandler touchesMovedWithTouches:unhandledTouches];
     if ( g_pref_touch_directional_enabled && unhandledTouches.count > 0 ) {
         [self handleTouchMovementTouchesMoved:unhandledTouches];
     }
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
-//    NSLog(@"👊👊👊👊👊👊 Touch Cancelled!!! 👊👊👊👊👊👊");
     NSSet *handledTouches = [self touchHandler:touches withEvent:event];
     NSSet *allTouches = [event allTouches];
     NSMutableSet *unhandledTouches = [NSMutableSet set];
@@ -3786,28 +3925,22 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
             [unhandledTouches addObject:touch];
         }
     }
-    if ( g_pref_touch_analog_enabled && myosd_mouse == 1 && unhandledTouches.count > 0 ) {
-        [self handleMouseTouchesBegan:unhandledTouches];
-    }
+    [self.touchMouseHandler touchesCancelledWithTouches:unhandledTouches];
     if ( g_pref_touch_directional_enabled && unhandledTouches.count > 0 ) {
         [self handleTouchMovementTouchesBegan:unhandledTouches];
     }
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-//    NSLog(@"🖐🖐🖐🖐🖐🖐🖐 Touch Ended!!! 🖐🖐🖐🖐🖐🖐");
     [self touchHandler:touches withEvent:event];
     
     // light gun release?
-    if ( myosd_light_gun == 1 && g_pref_lightgun_enabled ) {
+    if ( g_pref_lightgun_enabled ) {
         lightgun_status &= ~MYOSD_A;
         lightgun_status &= ~MYOSD_B;
     }
     
-    if ( g_pref_touch_analog_enabled && myosd_mouse == 1 ) {
-        mouse_delta_x[0] = 0.0f;
-        mouse_delta_y[0] = 0.0f;
-    }
+    [self.touchMouseHandler touchesEndedWithTouches:touches];
     
     if ( g_pref_touch_directional_enabled ) {
         myosd_pad_status &= ~MYOSD_DOWN;
@@ -4025,8 +4158,6 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
         CGPoint touchLoc = [touch locationInView:screenView];
         CGFloat newX = (touchLoc.x - (screenView.bounds.size.width / 2.0f)) / (screenView.bounds.size.width / 2.0f);
         CGFloat newY = (touchLoc.y - (screenView.bounds.size.height / 2.0f)) / (screenView.bounds.size.height / 2.0f) * -1.0f;
-//        NSLog(@"touch began light gun? loc: %f, %f",touchLoc.x, touchLoc.y);
-//        NSLog(@"new loc = %f , %f",newX,newY);
         if ( touchcount > 3 ) {
             // 4 touches = insert coin
             NSLog(@"LIGHTGUN: COIN");
@@ -4052,33 +4183,35 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
     }
 }
 
-#pragma mark - Mouse Touch Support
+#pragma mark - EmulatorTouchMouseHandlerDelegate
 
--(void) handleMouseTouchesBegan:(NSSet *)touches {
-    if ( screenView.window != nil ) {
-        UITouch *touch = [[touches allObjects] objectAtIndex:0];
-        mouseTouchStartLocation = [touch locationInView:screenView];
+-(void) handleMouseClickWithIsLeftClick:(BOOL)isLeftClick isPressed:(BOOL)isPressed {
+    NSLog(@"handleMouseClick: %s %s", isLeftClick ? "LEFT" : "RIGHT", isPressed ? "DOWN" : "UP");
+    if (isLeftClick) {
+        mouse_status[0] = (mouse_status[0] & ~MYOSD_A) | (isPressed ? MYOSD_A : 0);
+    } else {
+        mouse_status[0] = (mouse_status[0] & ~MYOSD_B) | (isPressed ? MYOSD_B : 0);
     }
 }
 
-- (void) handleMouseTouchesMoved:(NSSet *)touches {
-    if ( screenView.window != nil && !CGPointEqualToPoint(mouseTouchStartLocation, mouseInitialLocation) ) {
-        UITouch *touch = [[touches allObjects] objectAtIndex:0];
+-(void) handleMouseMoveWithX:(CGFloat)x y:(CGFloat)y {
+    NSLog(@"handleMouseMove: (%f,%f)", x, y);
+    [mouse_lock lock];
+    mouse_delta_x[0] = x * g_pref_touch_analog_sensitivity;
+    mouse_delta_y[0] = y * g_pref_touch_analog_sensitivity;
+    [mouse_lock unlock];
+}
 
-        // dont handle a touch from a mouse or track pad.
-        if (g_direct_mouse_enable && !(touch.type == UITouchTypeDirect || touch.type == UITouchTypePencil))
-            return;
-
-        CGPoint currentLocation = [touch locationInView:screenView];
-        CGFloat dx = currentLocation.x - mouseTouchStartLocation.x;
-        CGFloat dy = currentLocation.y - mouseTouchStartLocation.y;
-        NSLog(@"mouse x = %f , mouse y = %f",dx,dy);
-        mouseTouchStartLocation = [touch locationInView:screenView];
-        [mouse_lock lock];
-        mouse_delta_x[0] += dx * g_pref_touch_analog_sensitivity;
-        mouse_delta_y[0] += dy * g_pref_touch_analog_sensitivity;
-        [mouse_lock unlock];
-    }
+-(BOOL) shouldHandleMouseTouches:(NSSet<UITouch*>*) touches {
+    
+    if (!g_pref_touch_analog_enabled || myosd_mouse == 0 || touches.count == 0)
+        return NO;
+    
+    UITouch* touch = touches.anyObject;
+    if (g_direct_mouse_enable && !(touch.type == UITouchTypeDirect || touch.type == UITouchTypePencil))
+        return NO;
+    
+    return YES;
 }
 
 #pragma mark - Touch Movement Support
@@ -4090,7 +4223,7 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
 }
 
 -(void) handleTouchMovementTouchesMoved:(NSSet *)touches {
-    if ( screenView.window != nil && !CGPointEqualToPoint(touchDirectionalMoveStartLocation, mouseInitialLocation) ) {
+    if ( screenView.window != nil && !CGPointEqualToPoint(touchDirectionalMoveStartLocation, touchDirectionalInitialLocation) ) {
         myosd_pad_status &= ~MYOSD_DOWN;
         myosd_pad_status &= ~MYOSD_UP;
         myosd_pad_status &= ~MYOSD_LEFT;
@@ -4190,10 +4323,11 @@ void m4i_input_poll(myosd_input_state* myosd, size_t input_size) {
     
     // if we are fullscreen portrait, we need to move the command buttons to the top of screen
     if (g_device_is_fullscreen && !g_device_is_landscape) {
-        CGFloat x = 0, y = 0;
+        UIEdgeInsets safe = self.view.safeAreaInsets;
+        CGFloat x = safe.right, y = safe.top;
         rInput[BTN_SELECT].origin = rButton[BTN_SELECT].origin = CGPointMake(x, y);
         rInput[BTN_EXIT].origin   = rButton[BTN_EXIT].origin   = CGPointMake(x + rButton[BTN_SELECT].size.width, y);
-        x = self.view.bounds.size.width - rButton[BTN_START].size.width;
+        x = self.view.bounds.size.width - safe.left - rButton[BTN_START].size.width;
         rInput[BTN_START].origin  = rButton[BTN_START].origin = CGPointMake(x, y);
         rInput[BTN_OPTION].origin = rButton[BTN_OPTION].origin  = CGPointMake(x - rButton[BTN_OPTION].size.width, y);
     }
@@ -4406,9 +4540,11 @@ BOOL is_roms_dir(NSString* dir) {
     NSString *artwPath = [NSString stringWithUTF8String:get_documents_path("artwork")];
     NSString *sampPath = [NSString stringWithUTF8String:get_documents_path("samples")];
     NSString *skinPath = [NSString stringWithUTF8String:get_documents_path("skins")];
+    NSString *softPath = [NSString stringWithUTF8String:get_documents_path("software")];
 
     NSString *romPath = [rootPath stringByAppendingPathComponent:romName];
-    
+    NSString *romExt  = romPath.pathExtension.lowercaseString;
+
     // if the ROM had a name like "foobar 1.zip", "foobar (1).zip" use only the first word as the ROM name.
     // this most likley came when a user downloaded the zip and a foobar.zip already existed, MAME ROMs are <=20 char and no spaces.
     NSArray* words = [[romName stringByDeletingPathExtension] componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" -"]];
@@ -4439,27 +4575,32 @@ BOOL is_roms_dir(NSString* dir) {
     int __block numCHD = 0;
     int __block numWAV = 0;
     int __block numFiles = 0;
-    BOOL result = [ZipFile enumerate:romPath withOptions:ZipFileEnumFiles usingBlock:^(ZipFileInfo* info) {
-        NSString* ext = [info.name.pathExtension uppercaseString];
-        numFiles++;
-        if ([ext isEqualToString:@"LAY"])
-            numLAY++;
-        if ([ZIP_FILE_TYPES containsObject:ext.lowercaseString])
-            numZIP++;
-        if ([ext isEqualToString:@"WAV"])
-            numWAV++;
-        if ([ext isEqualToString:@"CHD"])
-            numCHD++;
-        for (int i=0; i<NUM_BUTTONS; i++)
-            numSKIN += [info.name.lastPathComponent isEqualToString:nameImgButton_Press[i]];
-        if ([skin_files containsObject:info.name.lastPathComponent])
-            numSKIN++;
-    }];
-
+    BOOL result = TRUE;
+    
+    if ([ZIP_FILE_TYPES containsObject:romExt])
+    {
+        result = [ZipFile enumerate:romPath withOptions:ZipFileEnumFiles usingBlock:^(ZipFileInfo* info) {
+            NSString* ext = [info.name.pathExtension uppercaseString];
+            numFiles++;
+            if ([ext isEqualToString:@"LAY"])
+                numLAY++;
+            if ([ZIP_FILE_TYPES containsObject:ext.lowercaseString])
+                numZIP++;
+            if ([ext isEqualToString:@"WAV"])
+                numWAV++;
+            if ([ext isEqualToString:@"CHD"])
+                numCHD++;
+            for (int i=0; i<NUM_BUTTONS; i++)
+                numSKIN += [info.name.lastPathComponent isEqualToString:nameImgButton_Press[i]];
+            if ([skin_files containsObject:info.name.lastPathComponent])
+                numSKIN++;
+        }];
+    }
+    
     NSString* toPath = nil;
     NSString* softList = nil;
 
-    if (!result && [romPath.pathExtension.lowercaseString isEqualToString:@"zip"])
+    if (!result)
     {
         NSLog(@"%@ is a CORRUPT ZIP (deleting)", romPath);
     }
@@ -4547,7 +4688,7 @@ BOOL is_roms_dir(NSString* dir) {
         NSLog(@"%@ is a SKIN file", romName);
         toPath = [skinPath stringByAppendingPathComponent:romName];
     }
-    else if ([romPath.pathExtension.lowercaseString isEqualToString:@"chd"])
+    else if ([romExt isEqualToString:@"chd"])
     {
         // TODO: some games use multiple CHDs or CHDs with names not matching the <romset> name, they need to be copied by hand in that case.
         NSLog(@"%@ is a CHD file", romName);
@@ -4561,19 +4702,31 @@ BOOL is_roms_dir(NSString* dir) {
         name = [name substringToIndex:name.length-1];
         if (toPath == nil && is_roms_dir(name))
             toPath = [[romsPath stringByAppendingPathComponent:name] stringByAppendingPathComponent:romName];
+        
+        // copy non-romset CHDs to software dir
+        if (toPath == nil)
+            toPath = [softPath stringByAppendingPathComponent:romName];
     }
-    else if ((softList = [g_softlist getSoftwareListNameForRomset:romPath named:romName.stringByDeletingPathExtension]) != nil) {
-        NSLog(@"%@ is a SOFTWARE ROMSET (%@)", romName, softList);
-        toPath = [[romsPath stringByAppendingPathComponent:softList] stringByAppendingPathComponent:romName];
-    }
-    else if ([romName length] <= 20 && ![romName containsString:@" "])
+    else if ([ZIP_FILE_TYPES containsObject:romExt])
     {
-        NSLog(@"%@ is a ROMSET", romName);
-        toPath = [romsPath stringByAppendingPathComponent:romName];
+        if (myosd_get(MYOSD_VERSION) > 139 && (softList = [g_softlist getSoftwareListNameForRomset:romPath named:romName.stringByDeletingPathExtension]) != nil) {
+            NSLog(@"%@ is a SOFTWARE ROMSET (%@)", romName, softList);
+            toPath = [[romsPath stringByAppendingPathComponent:softList] stringByAppendingPathComponent:romName];
+        }
+        else if ([romName length] <= 20 && ![romName containsString:@" "])
+        {
+            NSLog(@"%@ is a ROMSET", romName);
+            toPath = [romsPath stringByAppendingPathComponent:romName];
+        }
+    }
+    else if ([IMPORT_FILE_TYPES containsObject:romExt])
+    {
+        NSLog(@"%@ is SOFTWARE", romName);
+        toPath = [softPath stringByAppendingPathComponent:romName];
     }
     else
     {
-        NSLog(@"%@ is a NOT a ROMSET (deleting)", romName);
+        NSLog(@"%@ is a NOT a ROMSET or SOFTWARE (deleting)", romName);
     }
 
     // move file to either ROMS, ARTWORK or SAMPLES (or delete it)
@@ -4604,6 +4757,10 @@ BOOL is_roms_dir(NSString* dir) {
         // if this is a merged romset, release the kraken!!, I mean extract the clones.
         if (error == nil && [toPath hasPrefix:romsPath])
             [g_softlist extractClones:toPath];
+        
+        // if this is software, go looking for metadata
+        if (error == nil && [toPath hasPrefix:softPath])
+            [g_softlist installSoftware:toPath];
     }
     else
     {
@@ -4642,7 +4799,7 @@ BOOL is_roms_dir(NSString* dir) {
     NSArray* files_to_import = [self getFilesToImport];
     
     if (files_to_import.count != 0)
-        NSLog(@"found (%d) ROMs to move....", (int)files_to_import.count);
+        NSLog(@"found (%d) ROMs to move: %@", (int)files_to_import.count, files_to_import);
     if (files_to_import.count != 0 && g_move_roms != 0)
         NSLog(@"....cant moveROMs now");
     
@@ -4653,7 +4810,7 @@ BOOL is_roms_dir(NSString* dir) {
     if (self.presentedViewController.isBeingPresented)
         return [self performSelector:_cmd withObject:nil afterDelay:1.0];
     
-    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在移动 ROMs" message:@"请稍等..." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Moving ROMs" message:@"Please wait..." preferredStyle:UIAlertControllerStyleAlert];
     [progressAlert setProgress:0.0 text:@""];
     [self.topViewController presentViewController:progressAlert animated:YES completion:nil];
     
@@ -4725,7 +4882,7 @@ BOOL is_roms_dir(NSString* dir) {
         // TODO: 7z for artwork and samples?
         // TODO: we specificaly *DONT* save CHDs
         // "hi" is the 139 dir, and "hiscore" is the 2xx dir
-        NSArray* paths = @[@"roms/%@.zip", @"roms/%@.7z", @"artwork/%@.zip", @"samples/%@.zip", @"titles/%@.png", @"cfg/%@.cfg", @"ini/%@.ini", @"sta/%@/1.sta", @"sta/%@/2.sta", @"hi/%@.hi", @"hiscore/%@.hi"];
+        NSArray* paths = @[@"roms/%@.zip", @"roms/%@.7z", @"roms/%@.json", @"artwork/%@.zip", @"samples/%@.zip", @"titles/%@.png", @"cfg/%@.cfg", @"ini/%@.ini", @"sta/%@/1.sta", @"sta/%@/2.sta", @"hi/%@.hi", @"hiscore/%@.hi"];
 
         for (NSString* path in paths) {
             NSString* file = [NSString stringWithFormat:path, rom.stringByDeletingPathExtension];
@@ -4734,10 +4891,21 @@ BOOL is_roms_dir(NSString* dir) {
         }
     }
     
+    // save everything in the `software` directory too
+    for (NSString* file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:getDocumentPath(@"software") error:nil]) {
+        [files addObject:[NSString stringWithFormat:@"software/%@", file]];
+    }
+    
     // save everything in the `skins` directory too
     for (NSString* skin in [NSFileManager.defaultManager contentsOfDirectoryAtPath:skinPath error:nil]) {
         if ([skin.pathExtension.uppercaseString isEqualToString:@"ZIP"])
             [files addObject:[NSString stringWithFormat:@"skins/%@", skin]];
+    }
+    
+    // save everything in the `shader` directory too
+    for (NSString* file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:getDocumentPath(@"shaders") error:nil]) {
+        if ([file.pathExtension.lowercaseString isEqualToString:@"metal"])
+            [files addObject:[NSString stringWithFormat:@"shaders/%@", file]];
     }
     
     NSLog(@"getROMS: %@", files);
@@ -4786,8 +4954,8 @@ BOOL is_roms_dir(NSString* dir) {
 }
 
 - (void)runImport {
-    // TODO: we might need to export the `org.7-zip.7-zip-archive` type in Info.plist??
-    UIDocumentPickerViewController* documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip-archive", @"org.7-zip.7-zip-archive", @"org.mamedev.disk-image"] inMode:UIDocumentPickerModeImport];
+    // we use "public.data" to open any file, in addition to zip
+    UIDocumentPickerViewController* documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip-archive", @"org.7-zip.7-zip-archive", @"public.data"] inMode:UIDocumentPickerModeImport];
     documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
     documentPicker.delegate = (id<UIDocumentPickerDelegate>)self;
     documentPicker.allowsMultipleSelection = YES;
@@ -4899,21 +5067,29 @@ BOOL is_roms_dir(NSString* dir) {
     NSString* msg = @"Reset " PRODUCT_NAME;
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil message:msg preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"重置设置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reset Settings" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         [self reset];
         [self done:self];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"删除所有ROM" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete All ROMs" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         for (NSString* file in [EmulatorController getROMS]) {
             NSString* path = [NSString stringWithUTF8String:get_documents_path(file.UTF8String)];
             if (![NSFileManager.defaultManager removeItemAtPath:path error:nil])
                 NSLog(@"ERROR DELETING ROM: %@", file);
         }
+        // delete all files in roms and software in case above missed anything
+        for (NSString* dir in @[@"roms", @"software"])
+        {
+            NSString* path = getDocumentPath(dir);
+            [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+            [NSFileManager.defaultManager createDirectoryAtPath:path withIntermediateDirectories:NO attributes:nil error:nil];
+        }
+        g_no_roms_found_canceled = FALSE;
         [self reset];
         [self done:self];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [self.topViewController presentViewController:alert animated:YES completion:nil];
 }
 
@@ -4955,7 +5131,7 @@ BOOL is_roms_dir(NSString* dir) {
 
 -(void)resetCurrentLayout{
     
-    [self showAlertWithTitle:nil message:@"是否要将当前布局重置为默认设置" buttons:@[@"是", @"否"] handler:^(NSUInteger buttonIndex) {
+    [self showAlertWithTitle:nil message:@"Do you want to reset current layout to default?" buttons:@[@"Yes", @"No"] handler:^(NSUInteger buttonIndex) {
         if (buttonIndex == 0)
         {
             [NSFileManager.defaultManager removeItemAtPath:[self getLayoutPath] error:nil];
@@ -4989,7 +5165,7 @@ static unsigned long g_device_has_input[NUM_DEV];   // TRUE if device needs to b
     // add all the controllers with a extendedGamepad profile first
     for (GCController* controler in GCController.controllers) {
 #if TARGET_IPHONE_SIMULATOR // ignore the bogus controller in the simulator
-        if (controler.vendorName == nil || [controler.vendorName isEqualToString:@"Generic Controller"])
+        if (controler.vendorName == nil || [controler.vendorName isEqualToString:@"Generic Controller"] || [controler.vendorName isEqualToString:@"Gamepad"])
             continue;
 #endif
         if (controler.extendedGamepad != nil)
@@ -5077,6 +5253,14 @@ static unsigned long g_device_has_input[NUM_DEV];   // TRUE if device needs to b
     // Siri Remote special case
     if (controller.extendedGamepad == nil) {
         controller.microGamepad.valueChangedHandler = ^(GCMicroGamepad* gamepad, GCControllerElement* element) {
+            NSLog(@"valueChangedHandler[%ld:%ld]: %@ %s %s%s%s%s", [g_controllers indexOfObjectIdenticalTo:gamepad.controller], gamepad.controller.playerIndex, element,
+                  ([element isKindOfClass:[GCControllerButtonInput class]] && [(GCControllerButtonInput*)element isPressed]) ? "PRESSED" : "",
+                  ([element isKindOfClass:[GCControllerDirectionPad class]] && [(GCControllerDirectionPad*)element up].pressed) ? "U": "-",
+                  ([element isKindOfClass:[GCControllerDirectionPad class]] && [(GCControllerDirectionPad*)element down].pressed) ? "D" : "-",
+                  ([element isKindOfClass:[GCControllerDirectionPad class]] && [(GCControllerDirectionPad*)element left].pressed) ? "L" : "-",
+                  ([element isKindOfClass:[GCControllerDirectionPad class]] && [(GCControllerDirectionPad*)element right].pressed) ? "R" : "-"
+                  );
+
             int index = (int)[g_controllers indexOfObjectIdenticalTo:gamepad.controller];
             if (index >= 0 && index < NUM_DEV)
                 g_device_has_input[index] = 1;
@@ -5222,7 +5406,7 @@ static unsigned long g_device_has_input[NUM_DEV];   // TRUE if device needs to b
           pressed ? "DOWN" : "UP");
     
     // MENU button first time pressed
-    if (g_menuButtonMode[index] == 0 && pressed) {
+    if (g_menuButtonMode[index] == 0 && pressed && self.presentedViewController == nil) {
         
         // enter menu mode
         g_menuButtonMode[index] = button;
@@ -5325,8 +5509,9 @@ static unsigned long g_device_has_input[NUM_DEV];   // TRUE if device needs to b
     // DPAD and A/B navigate the menu (unless MENU/HOME/OPTION are down)
     if (g_menu && (current_state & (MYOSD_MENU | MYOSD_OPTION | MYOSD_HOME)) == 0) {
 #if TARGET_OS_IOS
-        UIPressType press = input_debounce(current_state, CGPointMake(controller.extendedGamepad.leftThumbstick.xAxis.value, controller.extendedGamepad.leftThumbstick.yAxis.value));
-        [g_menu handleButtonPress:press];
+        ButtonPressType press = input_debounce(current_state, CGPointMake(controller.extendedGamepad.leftThumbstick.xAxis.value, controller.extendedGamepad.leftThumbstick.yAxis.value));
+        if ([g_menu respondsToSelector:@selector(handleButtonPress:)])
+            [(id)g_menu handleButtonPress:(UIPressType)press];
 #endif
         changed_state &= ~(MYOSD_A|MYOSD_B|MYOSD_UP|MYOSD_DOWN|MYOSD_LEFT|MYOSD_RIGHT);
     }
@@ -5576,14 +5761,20 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
         // TODO: turns out MAME will merge mice by default, we dont need to.
 
         [mouse.mouseInput.leftButton setPressedChangedHandler:^(GCControllerButtonInput* button, float value, BOOL pressed) {
+            if (!g_direct_mouse_enable)
+                return;
             NSLog(@"MOUSE BUTTON %@", button);
             mouse_status[i] = (mouse_status[i] & ~MYOSD_A) | (pressed ? MYOSD_A : 0);
         }];
         [mouse.mouseInput.rightButton setPressedChangedHandler:^(GCControllerButtonInput* button, float value, BOOL pressed) {
+            if (!g_direct_mouse_enable)
+                return;
             NSLog(@"MOUSE BUTTON %@", button);
             mouse_status[i] = (mouse_status[i] & ~MYOSD_B) | (pressed ? MYOSD_B : 0);
         }];
         [mouse.mouseInput.middleButton setPressedChangedHandler:^(GCControllerButtonInput* button, float value, BOOL pressed) {
+            if (!g_direct_mouse_enable)
+                return;
             NSLog(@"MOUSE BUTTON %@", button);
             mouse_status[i] = (mouse_status[i] & ~MYOSD_Y) | (pressed ? MYOSD_Y : 0);
         }];
@@ -5668,6 +5859,17 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
     [self webServerShowAlert:server];
 }
 
+- (void)webUploader:(GCDWebUploader*)uploader didUploadFile:(NSString*)file progress:(float)progress {
+    NSLog(@"FILE UPLOAD: %@ (%d%%)", file, (int)(progress * 100));
+    UIAlertController* alert = (UIAlertController*)self.topViewController;
+    if ([alert isKindOfClass:[UIAlertController class]])
+        [alert setProgress:progress text:file];
+}
+
+- (void)webUploader:(GCDWebUploader*)uploader didUploadFileAtPath:(NSString*)path {
+    NSLog(@"FILE UPLOADED: %@", path);
+}
+
 - (void)webServerShowAlert:(GCDWebServer*)server {
     // dont bring up this WebServer alert multiple times, for example the server will stop and restart when app goes into background.
     static BOOL g_web_server_alert = FALSE;
@@ -5684,14 +5886,15 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
         [servers appendString:@"\n\n"];
     }
     if ( server.bonjourServerURL != nil ) {
-        [servers appendString:[NSString stringWithFormat:@"%@",server.bonjourServerURL]];
+        [servers appendString:[NSString stringWithFormat:@"%@\n\n",server.bonjourServerURL]];
     }
-    NSString* welcome = @"欢迎进入 " PRODUCT_NAME_LONG;
-    NSString* message = [NSString stringWithFormat:@"\n要想将 ROM 从电脑上传送到此设备，请在电脑 web 浏览器中打开以下网址:\n\n%@",servers];
-    NSString* title = g_no_roms_found ? welcome : @"Web服务器已启动";
-    NSString* done  = g_no_roms_found ? @"重载所有ROM" : @"停止服务";
+    NSString* welcome = @"Welcome to " PRODUCT_NAME_LONG;
+    NSString* message = [NSString stringWithFormat:@"To transfer ROMs from your computer go to one of these addresses in your web browser:\n\n%@",servers];
+    NSString* title = g_no_roms_found ? welcome : @"Web Server Started";
+    NSString* done  = g_no_roms_found ? @"Reload ROMs" : @"Stop Server";
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert setProgress:0.0 text:@""];
     [alert addAction:[UIAlertAction actionWithTitle:done style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         g_web_server_alert = FALSE;
         [[WebServer sharedInstance] webUploader].delegate = nil;
@@ -5715,7 +5918,7 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
 // NOTE we cant run a game in all situations, for example if the user is deep
 // into the Settings dialog, we just give up, to complex to try to back out.
 //
--(void)playGame:(NSDictionary*)game {
+-(void)playGame:(GameInfo*)game {
     NSLog(@"PLAY: %@", game);
     
     // if we are not presenting anything, we can just "run" the game
@@ -5764,12 +5967,6 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
                 return;
             }
         }
-        else if ([viewController isKindOfClass:[HUDViewController class]]) {
-            [viewController.presentingViewController dismissViewControllerAnimated:TRUE completion:^{
-                [self performSelectorOnMainThread:@selector(playGame:) withObject:game waitUntilDone:NO];
-            }];
-            return;
-        }
         else if ([viewController isKindOfClass:[ChooseGameController class]] && viewController.presentedViewController == nil) {
             // if we are in the ChooseGame UI dismiss and run game
             ChooseGameController* choose = (ChooseGameController*)viewController;
@@ -5782,25 +5979,19 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
         return;
     }
     
-    NSString* name = game[kGameInfoName];
-
-    if (name.length != 0) {
-        if ([name isEqualToString:kGameInfoNameMameMenu])
-            name = @" ";
+    if (game.gameName.length != 0) {
         g_mame_game_info = game;
-        strncpy(g_mame_system, game.gameSystem.UTF8String, sizeof(g_mame_system));
-        strncpy(g_mame_game, name.UTF8String, sizeof(g_mame_game));
+        set_mame_globals(game);
         [self updateUserActivity:game];
     }
     else {
+        set_mame_globals(nil);
         g_mame_game_info = nil;
-        g_mame_game[0] = g_mame_system[0] = 0;     // run the MENU
         [self updateUserActivity:nil];
     }
 
-    // TODO: *note* this will not work right if the mame configure menu is active, the menu will just dismiss, not a new issue.
     change_pause(PAUSE_FALSE);
-    myosd_exitGame = 1; // exit menu mode and start game or menu.
+    myosd_exitGame = 2; // force a hard exit, exit menu mode, exit app, start new game or menu.
 }
 
 -(void)reload {
@@ -5828,8 +6019,30 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
         }
         return;
     }
-    g_no_roms_found = [games count] <= 1;
-    if (g_no_roms_found) {
+    
+    if (g_mame_first_boot) {
+        g_mame_first_boot = FALSE;
+#if defined(DEBUG) && DebugLog
+        NSString* title = @PRODUCT_NAME;
+        NSString* msg = [NSString stringWithFormat:@"First Boot took %0.3fsec", TIMER_TIME(mame_boot)];
+        
+        change_pause(PAUSE_INPUT);
+        [self showAlertWithTitle:title message:msg buttons:@[@"Ok"] handler:^(NSUInteger button) {
+            [self performSelectorOnMainThread:@selector(chooseGame:) withObject:games waitUntilDone:FALSE];
+        }];
+        return;
+#endif
+    }
+
+    NSLog(@"ROMS: %@", [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects);
+    NSLog(@"SOFTWARE: %@", [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"software")].allObjects);
+
+    // NOTE: MAME 2xx has a bunch of "no-rom" arcade games, we need to check if `roms` is empty too
+    NSInteger roms_count = [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"roms")].allObjects.count +
+                           [NSFileManager.defaultManager enumeratorAtPath:getDocumentPath(@"software")].allObjects.count;
+    
+    g_no_roms_found = [games count] <= 1 || roms_count <= 1; // software dir has a single .txt file when empty
+    if (g_no_roms_found && !g_no_roms_found_canceled) {
         NSLog(@"NO GAMES, ASK USER WHAT TO DO....");
         
         // if iCloud is still initializing give it a litte time.
@@ -5838,35 +6051,9 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
             [self performSelector:_cmd withObject:games afterDelay:1.0];
             return;
         }
-
-        NSString* title = @"Welcome to " PRODUCT_NAME_LONG;
-#if TARGET_OS_TV
-        NSString* message = @"\nTo transfer ROMs from your computer, Start Web Server or Import ROMs.";
-#else
-        NSString* message = @"\nTo transfer ROMs from your computer, Start Web Server, Import ROMs, or use AirDrop.";
-#endif
-        CGFloat size = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline].pointSize;
         
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Start Web Server" style:UIAlertActionStyleDefault image:[UIImage systemImageNamed:@"arrow.up.arrow.down.circle" withPointSize:size] handler:^(UIAlertAction* action) {
-            [self runServer];
-        }]];
-#if TARGET_OS_IOS
-        [alert addAction:[UIAlertAction actionWithTitle:@"Import ROMs" style:UIAlertActionStyleDefault image:[UIImage systemImageNamed:@"square.and.arrow.down" withPointSize:size] handler:^(UIAlertAction* action) {
-            [self runImport];
-        }]];
-#endif
-        if (CloudSync.status == CloudSyncStatusAvailable)
-        {
-            [alert addAction:[UIAlertAction actionWithTitle:@"Import from iCloud" style:UIAlertActionStyleDefault image:[UIImage systemImageNamed:@"icloud.and.arrow.down" withPointSize:size] handler:^(UIAlertAction* action) {
-                [CloudSync import];
-            }]];
-        }
-        [alert addAction:[UIAlertAction actionWithTitle:@"Reload ROMs" style:UIAlertActionStyleCancel image:[UIImage systemImageNamed:@"arrow.2.circlepath.circle" withPointSize:size] handler:^(UIAlertAction * _Nonnull action) {
-            [self reload];  /* exit mame menu and re-scan ROMs*/
-        }]];
         change_pause(PAUSE_INPUT);
-        [self.topViewController presentViewController:alert animated:YES completion:nil];
+        [self runAddROMS:nil];
         return;
     }
     if (g_mame_game_error[0] != 0) {
@@ -5878,9 +6065,10 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
             msg = @"ERROR RUNNING GAME";
         
         g_mame_game_error[0] = 0;
-        g_mame_game[0] = g_mame_system[0] = 0;
+        set_mame_globals(nil);
         g_mame_game_info = nil;
         
+        change_pause(PAUSE_INPUT);
         [self showAlertWithTitle:title message:msg buttons:@[@"Ok"] handler:^(NSUInteger button) {
             [self performSelectorOnMainThread:@selector(chooseGame:) withObject:games waitUntilDone:FALSE];
         }];
@@ -5908,15 +6096,11 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
     NSLog(@"GAMES: %@", games);
 
     ChooseGameController* choose = [[ChooseGameController alloc] init];
-    [choose setGameList:games];
     choose.backgroundImage = [self loadTileImage:@"ui-background.png"];
+    choose.hideConsoles = g_pref_filter_bios;
+    [choose setGameList:games];
     change_pause(PAUSE_INPUT);
-    choose.selectGameCallback = ^(NSDictionary* game) {
-        if ([game[kGameInfoName] isEqualToString:kGameInfoNameSettings]) {
-            [self runSettings];
-            return;
-        }
-        
+    choose.selectGameCallback = ^(GameInfo* game) {
         if (self.presentedViewController.isBeingDismissed)
             return;
         
@@ -5926,6 +6110,13 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
             [self performSelectorOnMainThread:@selector(playGame:) withObject:game waitUntilDone:FALSE];
         }];
     };
+    choose.settingsCallback = ^(id from) {
+        [self runSettings];
+    };
+    choose.romsCallback = ^(id from) {
+        [self runAddROMS:from];
+    };
+
     UINavigationController* nav = [[UINavigationController alloc] initWithRootViewController:choose];
     nav.modalPresentationStyle = UIModalPresentationFullScreen;
     if (@available(iOS 13.0, tvOS 13.0, *)) {
@@ -5939,12 +6130,12 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
 #if TARGET_OS_TV
 
 - (NSArray*)preferredFocusEnvironments {
+    
+    // give focus to the HUD if it is the menu, else keyboard
+    if (g_menu == self)
+        return @[self];
+    
     return @[keyboardView];
-}
-
-- (void)remotePan:(UIPanGestureRecognizer*)pan {
-    if (g_pref_showHUD)
-        [hudView handleRemotePan:pan];
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
@@ -5954,24 +6145,23 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
 
         // these are press types sent by a keyboard in the simulator
         if (type == 2040) type = UIPressTypeSelect;
+        if (type == 2041) type = UIPressTypeMenu;
         if (type == 2079) type = UIPressTypeRightArrow;
         if (type == 2080) type = UIPressTypeLeftArrow;
         if (type == 2081) type = UIPressTypeDownArrow;
         if (type == 2082) type = UIPressTypeUpArrow;
-
+        
         // TODO: detect when this press is coming from a controller
         // NOTE we can get a press without a controller in the SIMULATOR or from an IR remote
 
-        // dont handle MENU here, we do it in handleMenuButton (except for no controllers)
-        if (type == UIPressTypeMenu && g_controllers.count == 0)
-            [self runMenu];
-        
-        // but handle UP/DOWN/LEFT/RIGHT, and PLAY/PAUSE for the HUD
-        if (g_pref_showHUD && self.presentedViewController == nil) {
-            if (type >= UIPressTypeUpArrow && type <= UIPressTypeSelect)
-                [hudView handleButtonPress:type];
-            if (type == UIPressTypePlayPause)
-                push_mame_key(MYOSD_KEY_P);
+        // ignore MENU key unless a dialog is up
+        if (type == UIPressTypeMenu && (self.presentedViewController == nil || self.presentedViewController == g_menu)) {
+
+            // normaly dont handle MENU here, we do it in handleMenuButton, except for no controllers
+            if (g_controllers.count == 0)
+                [self runMenu];
+
+            return;
         }
     }
     [super pressesBegan:presses withEvent:event];
@@ -5979,13 +6169,21 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     NSLog(@"PRESSES END: %ld", presses.allObjects.firstObject.type);
+    
+    for (UIPress *press in presses) {
+        UIPressType type = press.type;
+        
+        // ignore MENU key unless a dialog is up
+        if (type == UIPressTypeMenu && (self.presentedViewController == nil || self.presentedViewController == g_menu))
+            return;
+    }
     [super pressesEnded:presses withEvent:event];
 }
 #endif
 
 #pragma mark NSUserActivty
 
--(void)updateUserActivity:(NSDictionary*)game
+-(void)updateUserActivity:(GameInfo*)game
 {
 #if TARGET_OS_IOS
     if (game != nil)
@@ -6028,7 +6226,7 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
     // TODO: eventualy run multiple benchmarks, but for now just benchmark the current game
     NSString* title = @"Benchmarking";
     NSString* msg = g_mame_game_info.gameDescription;
-    [self showAlertWithTitle:title message:msg buttons:@[@"取消"] handler:^(NSUInteger button) {
+    [self showAlertWithTitle:title message:msg buttons:@[@"Stop"] handler:^(NSUInteger button) {
         g_mame_benchmark = FALSE;
         [self restart];
     }];
@@ -6039,13 +6237,10 @@ NSString* getGamepadSymbol(GCExtendedGamepad* gamepad, GCControllerElement* elem
 // the benchmark game has ended, log (and/or display) the result, and run next game (or end benchmark mode)
 - (void)endBenchmark
 {
-    NSParameterAssert(g_mame_benchmark);
-    NSParameterAssert(g_mame_game_info != nil);
-    
     // first remove any benchmark status alert
     if (self.presentedViewController != nil) {
+        NSParameterAssert([self.presentedViewController.title hasPrefix:@"Benchmark"]);
         NSParameterAssert([self.presentedViewController isKindOfClass:[UIAlertController class]]);
-        NSParameterAssert([[(UIAlertController*)self.presentedViewController title] hasPrefix:@"Benchmark"]);
         [self dismissViewControllerAnimated:NO completion:^{
             [self endBenchmark];
         }];

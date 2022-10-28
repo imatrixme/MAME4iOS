@@ -48,6 +48,7 @@
 #import "Bootstrapper.h"
 #import "Globals.h"
 #import "libmame.h"     // to get the MAME version
+#import "GameInfo.h"
 
 #import "EmulatorController.h"
 #import <GameController/GameController.h>
@@ -76,6 +77,17 @@ const char* get_documents_path(const char* file)
 
     return documents_path;
 }
+
+// versions of get_resource_path and get_documents_path that take (gasp!) an NSString*
+NSString* getResourcePath(NSString* str)
+{
+    return @(get_resource_path(str.UTF8String));
+}
+NSString* getDocumentPath(NSString* str)
+{
+    return @(get_documents_path(str.UTF8String));
+}
+
 
 @implementation Bootstrapper
 
@@ -134,7 +146,7 @@ NSArray* g_import_file_types;
         files = @[@"cheat.7z"];
     
     // add in fixed pre-canned files
-    files = [files arrayByAddingObjectsFromArray:@[@"Category.ini", @"hash.zip", @"skins/README.txt", @"shaders/README.txt", @"shaders/Example.metal", @"software/README.txt"]];
+    files = [files arrayByAddingObjectsFromArray:@[@"ui.bdf", @"Category.ini", @"hash.zip", @"skins/README.txt", @"shaders/README.txt", @"shaders/Example.metal", @"software/README.txt"]];
 
     // copy (or update) pre-canned files.
     for (NSString* file in files)
@@ -177,9 +189,11 @@ NSArray* g_import_file_types;
     // check UIApplicationLaunchOptionsURLKey to see if we were launched with a game URL, and set that as the game to restore.
     NSURL* url = launchOptions[UIApplicationLaunchOptionsURLKey];
     if ([url isKindOfClass:[NSURL class]]) {
-        // handle our own scheme mame4ios://name
-        if ([url.scheme isEqualToString:@"mame4ios"] && [url.host length] != 0 && [url.path length] == 0 && [url.query length] == 0) {
-            [EmulatorController setCurrentGame:@{@"name":url.host}];
+        
+        // handle our own url scheme mame4ios://
+        GameInfo* game = [[GameInfo alloc] initWithURL:url];
+        if (game != nil) {
+            [EmulatorController setCurrentGame:game];
             result = FALSE;
         }
     }
@@ -218,25 +232,14 @@ NSArray* g_import_file_types;
     return result;
 }
 
-- (void)moveROMS
-{
-    [self->hrViewController performSelectorOnMainThread:@selector(moveROMS) withObject:nil waitUntilDone:NO];
-}
-
-
 - (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
 {
     NSLog(@"OPEN URL: %@ %@", url, options);
     
-    // handle our own scheme mame4ios://game OR mame4ios://system/game
-    if ([url.scheme isEqualToString:@"mame4ios"] && [url.host length] != 0 && [url.query length] == 0) {
-        NSDictionary* game;
-        
-        if ([url.path length] != 0)
-            game = @{@"name":url.path, @"system":url.host};
-        else
-            game = @{@"name":url.host};
-        
+    GameInfo* game = [[GameInfo alloc] initWithURL:url];
+    
+    // handle our own scheme mame4ios://game OR mame4ios://system/game OR mame4ios://system/type:file
+    if (game != nil) {
         [hrViewController performSelectorOnMainThread:@selector(playGame:) withObject:game waitUntilDone:NO];
         return TRUE;
     }
@@ -271,8 +274,11 @@ NSArray* g_import_file_types;
                     NSLog(@"copyItemAtURL ERROR: (%@)", error);
                 
                 [url stopAccessingSecurityScopedResource];
-                [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(moveROMS) object:nil];
-                [self performSelector:@selector(moveROMS) withObject:nil afterDelay:1.0];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [NSObject cancelPreviousPerformRequestsWithTarget:self->hrViewController selector:@selector(moveROMS) object:nil];
+                    [self->hrViewController performSelector:@selector(moveROMS) withObject:nil afterDelay:1.0];
+                });
             }];
             if (error != nil)
                 NSLog(@"coordinateReadingItemAtURL ERROR: (%@)", error);
@@ -287,9 +293,9 @@ NSArray* g_import_file_types;
         
         if ([[[url URLByDeletingLastPathComponent] lastPathComponent] hasSuffix:@"Inbox"])
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
-        
-        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(moveROMS) object:nil];
-        [self performSelector:@selector(moveROMS) withObject:nil afterDelay:1.0];
+
+        [NSObject cancelPreviousPerformRequestsWithTarget:self->hrViewController selector:@selector(moveROMS) object:nil];
+        [self->hrViewController performSelector:@selector(moveROMS) withObject:nil afterDelay:1.0];
     }
     
     return TRUE;
@@ -304,7 +310,8 @@ NSArray* g_import_file_types;
     
     if ([cmd isEqualToString:@"play"])
     {
-        [hrViewController performSelectorOnMainThread:@selector(playGame:) withObject:info waitUntilDone:NO];
+        GameInfo* game = [[GameInfo alloc] initWithDictionary:info];
+        [hrViewController performSelectorOnMainThread:@selector(playGame:) withObject:game waitUntilDone:NO];
         return TRUE;
     }
         

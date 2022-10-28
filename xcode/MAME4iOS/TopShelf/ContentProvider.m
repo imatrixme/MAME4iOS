@@ -22,22 +22,48 @@
     return [[NSUserDefaults alloc] initWithSuiteName:name];
 }
 
+// see if a URL is home (ie non 404)
+- (BOOL)testURL:(NSURL*)url {
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setHTTPMethod:@"HEAD"];
+    
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block NSInteger status_code = 404;
+    [[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+        if (error == nil && [response isKindOfClass:[NSHTTPURLResponse class]])
+            status_code = [(NSHTTPURLResponse*)response statusCode];
+        dispatch_semaphore_signal(semaphore);
+    }] resume];
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    return status_code == 200;
+}
+
 // get a TopSelf item from game info
--(TVTopShelfSectionedItem*)getGameItem:(NSDictionary*)game {
-
-    if (![game isKindOfClass:[NSDictionary class]] || game[kGameInfoName] == nil || game[kGameInfoDescription] == nil)
+-(TVTopShelfSectionedItem*)getGameItem:(NSDictionary*)dict {
+    
+    if (![dict isKindOfClass:[NSDictionary class]])
         return nil;
 
-    // the MAME UI does not have a Title image, so exclude it.
-    if ([game.gameName isEqualToString:kGameInfoNameMameMenu])
+    GameInfo* game = [[GameInfo alloc] initWithDictionary:dict];
+
+    if (game.gameName.length == 0 || game.gameDescription.length == 0 || game.gameIsMame)
         return nil;
 
-    TVTopShelfSectionedItem* item = [[TVTopShelfSectionedItem alloc] initWithIdentifier:game.gameName];
+    if (game.gameImageURLs.count == 0 || game.gamePlayURL == nil)
+        return nil;
+    
+    NSString* identifier = game.gamePlayURL.absoluteString;
+    TVTopShelfSectionedItem* item = [[TVTopShelfSectionedItem alloc] initWithIdentifier:identifier];
     item.title = game.gameTitle;
+    
+    for (NSURL* url in game.gameImageURLs) {
+        if ([self testURL:url]) {
+            item.imageShape = TVTopShelfSectionedItemImageShapePoster;
+            [item setImageURL:url forTraits:TVTopShelfItemImageTraitScreenScale1x];
+            break;
+        }
+    }
 
-    item.imageShape = TVTopShelfSectionedItemImageShapePoster;
-    [item setImageURL:game.gameImageURL forTraits:TVTopShelfItemImageTraitScreenScale1x];
-     
     item.playAction = [[TVTopShelfAction alloc] initWithURL:game.gamePlayURL];
     item.displayAction = item.playAction;
 
@@ -48,9 +74,9 @@
 
     NSMutableArray* items = [games mutableCopy];
     
+    // do the equiv of a compactMap
     for (int i=0; i<items.count; i++)
         items[i] = [self getGameItem:items[i]] ?: NSNull.null;
-    
     [items removeObjectIdenticalTo:NSNull.null];
      
     TVTopShelfItemCollection* section = [[TVTopShelfItemCollection alloc] initWithItems:items];
@@ -61,11 +87,11 @@
 - (void)loadTopShelfContentWithCompletionHandler:(void (^) (id<TVTopShelfContent> content))completionHandler {
     NSUserDefaults* defaults = [self sharedUserDefaults];
     
-    NSArray* recent_games = [defaults objectForKey:RECENT_GAMES_KEY];
-    NSArray* favorite_games = [defaults objectForKey:FAVORITE_GAMES_KEY];
+    NSArray* recent_games = [defaults arrayForKey:RECENT_GAMES_KEY] ?: @[];
+    NSArray* favorite_games = [defaults arrayForKey:FAVORITE_GAMES_KEY] ?: @[];
     
     // if we dont have any content to show, let tvOS show the default image.
-    if (![recent_games isKindOfClass:[NSArray class]] || ![favorite_games isKindOfClass:[NSArray class]] || (recent_games.count + favorite_games.count) == 0) {
+    if (recent_games.count + favorite_games.count == 0) {
         return completionHandler(nil);
     }
     

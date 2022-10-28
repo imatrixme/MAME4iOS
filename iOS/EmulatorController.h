@@ -45,6 +45,7 @@
 #import <UIKit/UIKit.h>
 
 #import "Globals.h"
+#import "GameInfo.h"
 #import "ScreenView.h"
 #import "MetalScreenView.h"
 #import "GCDWebUploader.h"
@@ -70,6 +71,7 @@ extern NSArray* g_import_file_types;
 #if TARGET_OS_IOS
 @class AnalogStickView;
 @class LayoutView;
+@class EmulatorTouchMouseHandler;
 #endif
 
 @class InfoHUD;
@@ -82,7 +84,6 @@ extern NSArray* g_import_file_types;
   UIImageView	    * imageOverlay;
   UIImageView       * imageExternalDisplay;
   UIImageView       * imageLogo;
-  InfoHUD           * hudView;
 #if TARGET_OS_IOS
   AnalogStickView   * analogStickView;
   LayoutView        * layoutView;
@@ -117,9 +118,8 @@ extern NSArray* g_import_file_types;
 
 @property (class,readonly,nonatomic,strong) EmulatorController* sharedInstance;
 
-+ (NSArray<NSString*>*)romList;
-+ (NSDictionary*)getCurrentGame;
-+ (void)setCurrentGame:(NSDictionary*)game;
++ (GameInfo*)getCurrentGame;
++ (void)setCurrentGame:(GameInfo*)game;
 
 #if TARGET_OS_IOS
 // editing interface used by LayoutView
@@ -161,8 +161,8 @@ extern NSArray* g_import_file_types;
 
 + (NSArray<NSString*>*)getROMS;
 - (void)moveROMS;
-- (void)playGame:(NSDictionary*)game;
-- (void)chooseGame:(NSArray*)games;
+- (void)playGame:(GameInfo*)game;
+- (void)chooseGame:(NSArray<GameInfo*>*)games;
 - (void)reload;
 
 #if TARGET_OS_IOS
@@ -179,6 +179,7 @@ extern NSArray* g_import_file_types;
 #if TARGET_OS_IOS
 @property (strong, nonatomic) UIImpactFeedbackGenerator* impactFeedback;
 @property (strong, nonatomic) UISelectionFeedbackGenerator* selectionFeedback;
+@property (strong, nonatomic) EmulatorTouchMouseHandler* touchMouseHandler;
 #endif
 
 @end
